@@ -1,0 +1,49 @@
+{
+  "id": "zcrystal",
+  "name": "ZCrystal",
+  "description": "Honcho + Skills + Self-Evolution Plugin for OpenClaw",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "honchoBaseUrl": {
+        "type": "string",
+        "default": "http://localhost:8000",
+        "description": "Local Honcho service URL"
+      },
+      "workspace": {
+        "type": "string",
+        "default": "openclaw",
+        "description": "Honcho workspace ID"
+      },
+      "selfEvolution": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "onCompactOnly": {
+            "type": "boolean",
+            "default": true,
+            "description": "Only trigger on /compact"
+          }
+        }
+      },
+      "skills": {
+        "type": "object",
+        "properties": {
+          "autoDiscover": {
+            "type": "boolean",
+            "default": true
+          },
+          "paths": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": ["~/.openclaw/skills"]
+          }
+        }
+      }
+    }
+  }
+}
