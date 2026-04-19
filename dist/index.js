@@ -8,7 +8,7 @@
  */
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { Type } from '@sinclair/typebox';
-import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, ToolHub, SkillGenerator, CircuitBreaker, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
+import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, ToolHub, SkillGenerator, CircuitBreaker, RateLimiter, StructuredLogger, Metrics, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
 let state = null;
 function okResult(text, details) {
     return { content: [{ type: 'text', text }], details: details ?? {} };
@@ -87,7 +87,10 @@ export default definePluginEntry({
             successThreshold: 2,
             timeout: 60000,
         });
-        state = { router, honcho, skillManager, selfEvolution, toolHub, skillGenerator, circuitBreaker };
+        const rateLimiter = new RateLimiter({ maxTokens: 100, refillRate: 10, windowMs: 60000 });
+        const logger = new StructuredLogger('ZCrystal');
+        const metrics = new Metrics();
+        state = { router, honcho, skillManager, selfEvolution, toolHub, skillGenerator, circuitBreaker, rateLimiter, logger, metrics };
         // =====================================================================
         // Core Tools (Original ZCrystal + ZCrystal_evo)
         // =====================================================================
@@ -451,6 +454,102 @@ export default definePluginEntry({
                     return okResult('Circuit allows execution');
                 }
                 return errResult('Circuit breaker is OPEN - operation blocked');
+            },
+        }, { optional: true });
+        // =====================================================================
+        // Rate Limiter Integration
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_rate_status',
+            label: 'ZCrystal Rate Limiter Status',
+            description: 'Get rate limiter current status',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const status = state.rateLimiter.getStatus();
+                return okResult(JSON.stringify(status, null, 2));
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_rate_check',
+            label: 'ZCrystal Rate Check',
+            description: 'Check if operation is allowed (Agent-internal)',
+            parameters: Type.Object({ tokens: Type.Optional(Type.Number()) }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const allowed = state.rateLimiter.isAllowed(params.tokens || 1);
+                if (allowed) {
+                    return okResult('Rate limit allows execution');
+                }
+                return errResult('Rate limit exceeded');
+            },
+        }, { optional: true });
+        // =====================================================================
+        // Structured Logger Integration
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_log',
+            label: 'ZCrystal Log',
+            description: 'Write structured log entry (Agent-internal)',
+            parameters: Type.Object({
+                level: Type.Union([Type.Literal('info'), Type.Literal('warn'), Type.Literal('error')]),
+                message: Type.String(),
+                context: Type.Optional(Type.Record(Type.String(), Type.Any())),
+            }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                if (params.level === 'info')
+                    state.logger.info(params.message, params.context || {});
+                else if (params.level === 'warn')
+                    state.logger.warning(params.message, params.context || {});
+                else if (params.level === 'error')
+                    state.logger.error(params.message, params.context || {});
+                return okResult('Logged: ' + params.message);
+            },
+        }, { optional: true });
+        // =====================================================================
+        // Metrics Integration
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_metrics_get',
+            label: 'ZCrystal Metrics Get',
+            description: 'Get current metrics statistics',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const stats = state.metrics.getStats();
+                return okResult(JSON.stringify(stats, null, 2));
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_metrics_record',
+            label: 'ZCrystal Metrics Record',
+            description: 'Record a custom metric event (Agent-internal)',
+            parameters: Type.Object({
+                type: Type.Union([Type.Literal('task'), Type.Literal('tool'), Type.Literal('model')]),
+                name: Type.String(),
+                durationMs: Type.Optional(Type.Number()),
+                success: Type.Optional(Type.Boolean()),
+            }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                if (params.type === 'task') {
+                    if (params.success === false) {
+                        state.metrics.recordTaskFailed(params.name, 'error', params.durationMs || 0);
+                    }
+                    else {
+                        state.metrics.recordTaskCompleted(params.name, params.durationMs || 0);
+                    }
+                }
+                else if (params.type === 'tool') {
+                    state.metrics.recordToolCall(params.name, params.durationMs || 0, params.success !== false);
+                }
+                return okResult('Metric recorded: ' + params.type + '/' + params.name);
             },
         }, { optional: true });
         // =====================================================================
