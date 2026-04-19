@@ -104,6 +104,11 @@ export default definePluginEntry({
         const skillMerger = new SkillMerger();
         const reviewEngine = new ReviewEngine();
         const evolutionCoordinator = new EvolutionCoordinator(evolutionStore, traceStore);
+        // Initialize Self-Improving Engine
+        (async () => {
+            const { selfImproving } = await import('./self-improving/index.js');
+            await selfImproving.initialize();
+        })();
         // Create evolution scheduler for auto-evolution
         const getSkills = async () => {
             try {
@@ -1393,6 +1398,162 @@ export default definePluginEntry({
             },
         });
         // =====================================================================
+        // Self-Improving Tools
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_correction_add',
+            label: 'ZCrystal Correction Add',
+            description: 'Add a correction to the learning log',
+            parameters: Type.Object({
+                context: Type.String(),
+                reflection: Type.String(),
+            }),
+            async execute(_id, params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                await selfImproving.addCorrection(params.context, params.reflection);
+                return okResult('Correction added');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_correction_list',
+            label: 'ZCrystal Correction List',
+            description: 'List recent corrections',
+            parameters: Type.Object({ limit: Type.Optional(Type.Number()) }),
+            async execute(_id, params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const corrections = await selfImproving.getCorrections(params.limit || 10);
+                return okResult(JSON.stringify(corrections, null, 2), { count: corrections.length });
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_memory_add',
+            label: 'ZCrystal Memory Add',
+            description: 'Add a line to the HOT memory layer',
+            parameters: Type.Object({ content: Type.String() }),
+            async execute(_id, params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                await selfImproving.addMemoryLine(params.content);
+                return okResult('Memory line added');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_memory_get',
+            label: 'ZCrystal Memory Get',
+            description: 'Get HOT memory content',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const memory = await selfImproving.getMemory();
+                return okResult(memory);
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_heartbeat_run',
+            label: 'ZCrystal Heartbeat Run',
+            description: 'Run heartbeat maintenance check',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const result = await selfImproving.runHeartbeat();
+                return okResult(JSON.stringify(result, null, 2), result.stats);
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_heartbeat_status',
+            label: 'ZCrystal Heartbeat Status',
+            description: 'Get heartbeat engine status',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const status = await selfImproving.getStatus();
+                return okResult(JSON.stringify(status, null, 2));
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_layers_exchange',
+            label: 'ZCrystal Layers Exchange',
+            description: 'Run layer exchange (HOT→WARM→COLD)',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const result = await selfImproving.exchangeLayers();
+                return okResult(JSON.stringify(result, null, 2), result);
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_predict',
+            label: 'ZCrystal Predict Needs',
+            description: 'Predict user needs based on context',
+            parameters: Type.Object({ context: Type.String() }),
+            async execute(_id, params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const prediction = await selfImproving.predictNeeds(params.context);
+                return okResult(JSON.stringify(prediction, null, 2), prediction);
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_pattern_add',
+            label: 'ZCrystal Pattern Add',
+            description: 'Add a successful pattern',
+            parameters: Type.Object({
+                pattern: Type.String(),
+                description: Type.String(),
+            }),
+            async execute(_id, params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                await selfImproving.addPattern(params.pattern, params.description);
+                return okResult('Pattern added');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_pattern_list',
+            label: 'ZCrystal Pattern List',
+            description: 'List learned patterns',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const patterns = await selfImproving.getPatterns();
+                return okResult(JSON.stringify(patterns, null, 2), { count: patterns.length });
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_log_action',
+            label: 'ZCrystal Log Action',
+            description: 'Log a proactive action',
+            parameters: Type.Object({
+                action: Type.String(),
+                result: Type.String(),
+            }),
+            async execute(_id, params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                await selfImproving.logAction(params.action, params.result);
+                return okResult('Action logged');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_log_recent',
+            label: 'ZCrystal Log Recent',
+            description: 'Get recent action logs',
+            parameters: Type.Object({ limit: Type.Optional(Type.Number()) }),
+            async execute(_id, params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const actions = await selfImproving.getRecentActions(params.limit || 10);
+                return okResult(JSON.stringify(actions, null, 2), { count: actions.length });
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_selfimproving_status',
+            label: 'ZCrystal Self-Improving Status',
+            description: 'Get full self-improving system status',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                const { selfImproving } = await import('./self-improving/index.js');
+                const status = await selfImproving.getStatus();
+                return okResult(JSON.stringify(status, null, 2));
+            },
+        });
+        // =====================================================================
+        // Commands    // =====================================================================
         // Commands
         // =====================================================================
         api.registerCommand({
