@@ -553,6 +553,189 @@ export default definePluginEntry({
             },
         }, { optional: true });
         // =====================================================================
+        // Missing Task Tools
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_task_stats',
+            label: 'ZCrystal Task Stats',
+            description: 'Get task system statistics',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.getTaskStats();
+                if (result.success) {
+                    return okResult(JSON.stringify(result.data, null, 2));
+                }
+                return errResult('Failed to get task stats');
+            },
+        });
+        // =====================================================================
+        // Missing Memory Tools
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_memory_search',
+            label: 'ZCrystal Memory Search',
+            description: 'Search memory across all layers',
+            parameters: Type.Object({ query: Type.String() }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.memorySearch(params.query);
+                if (result?.success) {
+                    return okResult(JSON.stringify(result.data, null, 2), { count: result.data?.length });
+                }
+                return errResult('Memory search failed');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_memory_delete',
+            label: 'ZCrystal Memory Delete',
+            description: 'Delete a memory entry',
+            parameters: Type.Object({ layer: Type.String(), key: Type.String() }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.memoryDelete(params.layer, params.key);
+                if (result?.success) {
+                    return okResult('Memory deleted');
+                }
+                return errResult('Memory delete failed');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_memory_stats',
+            label: 'ZCrystal Memory Stats',
+            description: 'Get memory system statistics',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.memoryStats();
+                if (result?.success) {
+                    return okResult(JSON.stringify(result.data, null, 2));
+                }
+                return errResult('Memory stats failed');
+            },
+        });
+        // =====================================================================
+        // Missing Router Tools
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_router_list',
+            label: 'ZCrystal Router List',
+            description: 'List all available models in router',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.listModels();
+                if (result.success) {
+                    return okResult(JSON.stringify(result.data, null, 2), { count: result.data?.models?.length || 0 });
+                }
+                return errResult('Failed to list models');
+            },
+        });
+        // =====================================================================
+        // Missing Health Tools
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_evo_ready',
+            label: 'ZCrystal Evo Ready',
+            description: 'Check if ZCrystal_evo is ready to serve requests',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.readinessCheck();
+                if (result?.success) {
+                    return okResult('ZCrystal_evo is ready');
+                }
+                return errResult('ZCrystal_evo is not ready');
+            },
+        });
+        // =====================================================================
+        // Missing Skill Tools  
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_skill_versions',
+            label: 'ZCrystal Skill Versions',
+            description: 'Get version history for a skill',
+            parameters: Type.Object({ skillId: Type.String() }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.getSkillVersions(params.skillId);
+                if (result.success) {
+                    return okResult(JSON.stringify(result.data, null, 2), { count: result.data?.versions?.length || 0 });
+                }
+                return errResult('Failed to get skill versions');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_skill_rollback',
+            label: 'ZCrystal Skill Rollback',
+            description: 'Rollback skill to a specific version',
+            parameters: Type.Object({ skillId: Type.String(), version: Type.String() }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.rollbackSkill(params.skillId, params.version);
+                if (result.success) {
+                    return okResult('Rolled back to version: ' + params.version);
+                }
+                return errResult('Rollback failed');
+            },
+        });
+        // =====================================================================
+        // Webhook Tools
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_webhook_telegram',
+            label: 'ZCrystal Webhook Telegram',
+            description: 'Handle incoming Telegram webhook',
+            parameters: Type.Object({ payload: Type.Record(Type.String(), Type.Any()) }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.telegramWebhook(params.payload);
+                if (result.success) {
+                    return okResult(JSON.stringify(result.data, null, 2));
+                }
+                return errResult('Telegram webhook failed');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_webhook_signal',
+            label: 'ZCrystal Webhook Signal',
+            description: 'Handle incoming Signal webhook',
+            parameters: Type.Object({ payload: Type.Record(Type.String(), Type.Any()) }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.signalWebhook(params.payload);
+                if (result.success) {
+                    return okResult(JSON.stringify(result.data, null, 2));
+                }
+                return errResult('Signal webhook failed');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_webhook_generic',
+            label: 'ZCrystal Webhook Generic',
+            description: 'Handle incoming generic webhook',
+            parameters: Type.Object({ payload: Type.Record(Type.String(), Type.Any()) }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.genericWebhook(params.payload);
+                if (result.success) {
+                    return okResult(JSON.stringify(result.data, null, 2));
+                }
+                return errResult('Generic webhook failed');
+            },
+        });
+        // =====================================================================
         // Commands
         // =====================================================================
         api.registerCommand({
