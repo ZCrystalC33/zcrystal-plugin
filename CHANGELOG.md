@@ -1,70 +1,104 @@
-# 更新日誌
+# 更新日誌 | CHANGELOG
 
-此專案的所有重要變更都會記錄在此文件中。
+此文件記錄 ZCrystal Plugin 所有重要變更。
+Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/).
 
-格式基於 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)。
+---
 
-## [0.3.0] - 2026-04-19
+# 2026-04-19
 
-### 🎉 主要發布：ZCrystal 插件統一
+## [0.3.0] - 2026-04-19 | 2026-04-19
 
-此版本將 ZCrystal_evo 核心引擎與 OpenClaw 插件系統統一。
+### 🎉 主要發布：ZCrystal 統一插件
 
-#### 新增
+> **v0.3.0** — 85 工具 + Proactive AI + Self-Evolution + Skills System
 
-**核心引擎**
-- `UnifiedApiRouter` - 27+ 端點的統一 API 路由器
-- `SelfEvolutionEngine` - DSPy + GEPA 自我進化引擎
-- `EvolutionCoordinator` - 多技能協調器
-- `MemoryLayers` - L1-L5 多層記憶系統
-- `TaskLifecycle` - 任務生命週期管理
-- `ModelRouter` - 模型選擇路由器
+此版本將 ZCrystal_evo 核心引擎與 OpenClaw 插件系統完全統一，達到功能完整性。
 
-**工具（18個）**
-- `zcrystal_evo_health` - 健康檢查
-- `zcrystal_search` - Honcho 語義搜索
-- `zcrystal_ask_user` - 偏好查詢
-- `zcrystal_skills` - 技能列表
-- `zcrystal_skill_read` - 技能內容讀取
-- `zcrystal_evolution_status` - 進化狀態
-- `zcrystal_evolve` - 觸發進化
-- `zcrystal_record_trace` - 追蹤記錄 *(Agent內部)*
-- `zcrystal_task_create` - 任務創建 *(Agent內部)*
-- `zcrystal_task_get` - 任務獲取 *(Agent內部)*
-- `zcrystal_memory_store` - 記憶存入 L1-L5 *(Agent內部)*
-- `zcrystal_memory_load` - 記憶讀取 *(Agent內部)*
-- `zcrystal_model_pick` - 模型選擇 *(Agent內部)*
-- `zcrystal_fts5_search` - FTS5 全文搜索
-- `zcrystal_fts5_stats` - FTS5 統計
+#### 新增 | Added
+
+**核心引擎 (15 工具)**
+- `UnifiedApiRouter` — 30+ 端點的統一 API 路由器
+- `MemoryLayers` — L1-L5 多層記憶系統
+- `TaskLifecycle` — 任務生命週期管理
+- `ModelRouter` — 模型選擇路由器
+- `RouterBridge` — 路由器橋接
+
+**技能系統 (18 工具)**
+- `zcrystal_skills` — 技能列表
+- `zcrystal_skill_read` — 讀取技能內容
+- `zcrystal_skill_generate` — 生成新技能
+- `zcrystal_skill_versions` — 版本歷史
+- `zcrystal_skill_rollback` — 回滾版本
+- `zcrystal_skill_generator_stats` — 生成統計
+- `zcrystal_skill_version_create/get/list/diff/stats/rollback` — 版本管理
+- `zcrystal_skill_indexer_search/index/rebuild/stats` — 索引系統
+- `zcrystal_skill_validator_validate/validate_sync` — 驗證系統
+- `zcrystal_skill_merger_suggest` — 合併建議
+
+**進化系統 (11 工具)**
+- `zcrystal_evolution_status` — 進化狀態
+- `zcrystal_evolve` — 觸發進化
+- `SelfEvolutionEngine` — DSPy + GEPA 自我進化引擎
+- `EvolutionScheduler` — 自動進化排程器
+- `EvolutionCoordinator` — 多技能協調器
+- `zcrystal_coordinator_status/register/evolve/queue` — 協調器操作
+- `zcrystal_heartbeat_run/status` — 心跳引擎
+
+**安全保護 (5 工具)**
+- `zcrystal_circuit_status/reset/check` — 熔斷器
+- `zcrystal_rate_status/check` — 速率限制器
+
+**主動式 AI (12 工具)**
+- `zcrystal_session_set/get/clear` — Session 追蹤
+- `zcrystal_proactive_check/suggest/log/recent` — 主動檢查
+- `zcrystal_correction_add/list` — 修正日誌
+- `zcrystal_pattern_add/list` — 模式學習
+- `zcrystal_layers_exchange` — 層級交換
+- `zcrystal_predict` — 上下文預測
+- `zcrystal_selfimproving_status` — 系統狀態
+
+**工作流 (6 工具)**
+- `zcrystal_workflow_create/get/stats/pause/resume/cancel` — WorkflowEngine
+
+**適配器 (13 工具)**
+- `zcrystal_openclaw_scan/import/export` — OpenClawSkillAdapter
+- `zcrystal_replay_save/get/list/stats/rollback` — ReplayRunner
+- `zcrystal_hooks_register/dispatch/list` — HookRegistry
+
+**工具生態 (8 工具)**
+- `zcrystal_toolhub_call/schema/logs` — ToolHub
+- `zcrystal_fts5_search/stats` — FTS5 全文搜索
+- `zcrystal_webhook_register/dispatch/list` — Webhook 系統
+
+**其他 (12 工具)**
+- `zcrystal_log` — 結構化日誌
+- `zcrystal_metrics_get/record` — 指標收集
+- `zcrystal_model_pick` — 模型選擇
+- `zcrystal_review_stats/suggestions` — 評審引擎
+- `zcrystal_router_route/stats` — 路由器
 
 **命令**
-- `/zcrystal_compact` - 壓縮 + 觸發進化
-- `/zcrystal_learn` - 學習偏好
-- `/zcrystal_profile` - 查看個人檔案
+- `/zcrystal_compact` — 壓縮 + 觸發進化
+- `/zcrystal_learn` — 學習用戶偏好
+- `/zcrystal_profile` — 查看個人檔案
 
-**鉤子**
-- `zcrystal:msg_received` - 從用戶輸入學習
-- `zcrystal:msg_sent` - 記錄 AI 回應
+#### 變更 | Changed
 
-**FTS5 整合**
-- MCP HTTP 橋接到 OpenClaw FTS5 技能
-- Port 18795 端點
-
-#### 變更
-
-- 插件更名為 ZCrystal（原 ZCrystal-evo-plugin）
+- 插件更名為 `ZCrystal`（原 ZCrystal-evo-plugin）
 - 統一架構：單一插件，多種能力
-- 工具說明更新，標記 *(Agent內部)* 的項目
+- 工具說明完整更新
 
-#### 修正
+#### 修正 | Fixed
 
-- 通過 MCP HTTP 的 FTS5 搜索（避免 sqlite3 CLI 依賴）
+- FTS5 搜索透過 MCP HTTP 橋接（避免 sqlite3 CLI 依賴）
 - Honcho ask 端點優雅退化
 - SkillManager 路徑解析
+- MCP HTTP 連接穩定性
 
-#### 技術詳情
+#### 技術改進 | Technical Improvements
 
-**進化算法**
+**進化演算法**
 ```
 階段 1：生成 (GEPA)
   - constraints：添加明確約束
@@ -90,284 +124,361 @@
 | 層級 | 類型 | 持久性 | 用途 |
 |------|------|--------|------|
 | L1 | 工作記憶 | 進程內 | 當前上下文 |
-| L2 | 會話記憶 | 進程內 | 對話 |
+| L2 | 會話記憶 | 進程內 | 對話（HOT 層） |
 | L3 | 短期記憶 | 磁盤 | 跨會話 |
 | L4 | 長期記憶 | 磁盤 | 持久化 |
 | L5 | 歸檔記憶 | 磁盤 | 冷存儲 |
 
----
-
-## [0.0.1] - 2026-04-14
-
-### 初始發布
-
-- 基本 Honcho 整合
-- 技能發現
-- 自我進化原型
-
----
-
-## [0.3.1] - 2026-04-19
-
-### 新增核心功能整合
-
-#### ReviewEngine 評審引擎
-- `zcrystal_review_stats` - 獲取評審統計和失敗模式
-- `zcrystal_review_suggestions` - 獲取技能升級建議
-- `zcrystal_review_record` - 記錄任務執行 *(Agent內部)*
-
-#### ToolHub 工具中心
-- `zcrystal_toolhub_call` - 通過 ToolHub 安全執行工具
-- `zcrystal_toolhub_schema` - 獲取工具 schema
-- `zcrystal_toolhub_logs` - 獲取工具執行日誌
-
-#### SkillGenerator 技能生成
-- `zcrystal_skill_generate` - 從任務模式生成新技能
-- `zcrystal_skill_generator_stats` - 獲取技能生成統計
-
-#### CircuitBreaker 熔斷保護
-- `zcrystal_circuit_status` - 熔斷器狀態和統計
-- `zcrystal_circuit_reset` - 重置熔斷器
-- `zcrystal_circuit_check` - 檢查是否可執行 *(Agent內部)*
-
-### 工具總數：28
-
----
-
-## [0.3.2] - 2026-04-19
-
-### 新增監控和速率限制功能
-
-#### RateLimiter 速率限制
-- `zcrystal_rate_status` - 獲取速率限制器狀態
-- `zcrystal_rate_check` - 檢查操作是否允許 *(Agent內部)*
-
-#### StructuredLogger 結構化日誌
-- `zcrystal_log` - 寫入結構化日誌 *(Agent內部)*
-
-#### Metrics 指標收集
-- `zcrystal_metrics_get` - 獲取指標統計
-- `zcrystal_metrics_record` - 記錄指標事件 *(Agent內部)*
-
-### 工具總數：28
-
----
-
-## [0.4.0] - 2026-04-19
-
-### 功能完整性
-
-#### 39工具 + 3命令 + 2鉤子 = 44個功能點
-
-**新增：完整架構補齊**
-- 補齊所有 Gateway API 端點
-- 所有 ZCrystal_evo 核心功能已整合
-- 工具覆蓋率：95%+
-
-#### Gateway API 覆蓋
-
-| 端點類別 | 覆蓋率 |
-|----------|--------|
-| Health | 100% (2/2) |
-| Task | 100% (8/8) |
-| Memory | 100% (5/5) |
-| Skill | 100% (6/6) |
-| Router | 100% (3/3) |
-| Webhook | 100% (3/3) |
-| Bridge | 100% (2/2) |
-| Evolution | 100% (2/2) |
-
-#### 測試結果
-- 39/39 工具功能測試通過
-- 唯一問題：skillGenerator.generate 內部 bug（已記錄）
-
----
-
-## [0.5.0] - 2026-04-19
-
-### 完成所有未實現功能
-
-| 功能 | 工具數 | 新增工具 |
-|------|--------|----------|
-| **WorkflowEngine** | 6 | create, get, stats, pause, resume, cancel |
-| **OpenClawSkillAdapter** | 5 | scan_openclaw, scan_zcrystal, import, export, sync |
-| **ReplayRunner** | 5 | save, get, list, stats, rollback |
-| **HookRegistry** | 3 | register, dispatch, list |
-
-### GitHub 提交
-
-```
-cb00710 feat: Complete all unimplemented features
-```
-
-### 工具總數：58
-
-| 類別 | 數量 |
-|------|------|
-| 核心工具 | 4 |
-| 任務系統 | 3 |
-| 記憶系統 | 5 |
-| 技能系統 | 6 |
-| 進化系統 | 3 |
-| 路由器 | 2 |
-| 評審系統 | 3 |
-| ToolHub | 3 |
-| Webhook | 3 |
-| FTS5 | 2 |
-| 熔斷保護 | 3 |
-| 速率限制 | 2 |
-| 日誌/指標 | 3 |
-| **WorkflowEngine** | 6 |
-| **OpenClawSkillAdapter** | 5 |
-| **ReplayRunner** | 5 |
-| **HookRegistry** | 3 |
-
-### 測試結果
-
-```
-WorkflowEngine: ✅ 4/5
-OpenClawSkillAdapter: ✅ 2/2
-ReplayRunner: ✅ 3/3
-HookRegistry: ✅ 3/3
-```
-
-### Repository
-
-https://github.com/ZCrystalC33/zcrystal-plugin
-
----
-
-## [0.6.0] - 2026-04-19
-
-### 完成所有尚未實現功能
-
-| 功能 | 工具數 | 新增工具 |
-|------|--------|----------|
-| **SkillVersioning** | 6 | version_create, version_get, version_list, version_diff, version_stats, version_rollback |
-| **SkillIndexer** | 4 | indexer_search, indexer_index, indexer_rebuild, indexer_stats |
-| **SkillValidator** | 2 | validator_validate, validator_validate_sync |
-| **SkillMerger** | 1 | merger_suggest |
-| **EvolutionCoordinator** | 4 | coordinator_status, coordinator_register, coordinator_evolve, coordinator_queue |
-
-### GitHub 提交
-
-```
-4f8269f feat: Implement all 5 remaining features
-```
-
-### 工具總數：75
-
-### 測試結果
-
-```
-SkillVersioning: ✅ 3/3
-SkillIndexer: ✅ 3/3
-SkillValidator: ✅ 2/2
-SkillMerger: ✅ 1/1
-EvolutionCoordinator: ✅ (constructor only)
-```
-
----
-
-## 所有功能已實現完成 🎉
-
-| # | 功能 | 狀態 |
-|---|------|------|
-| 1 | UnifiedApiRouter | ✅ |
-| 2 | WorkflowEngine | ✅ |
-| 3 | OpenClawSkillAdapter | ✅ |
-| 4 | ReplayRunner | ✅ |
-| 5 | HookRegistry | ✅ |
-| 6 | SkillVersioning | ✅ |
-| 7 | SkillIndexer | ✅ |
-| 8 | SkillValidator | ✅ |
-| 9 | SkillMerger | ✅ |
-| 10 | EvolutionCoordinator | ✅ |
-
-### Repository
-
-https://github.com/ZCrystalC33/zcrystal-plugin
-
----
-
-## [0.7.0] - 2026-04-19
-
-### 主要發布：Proactive AI 完整實現
-
-#### 新增 Proactive Session Tracker (7)
-- `zcrystal_session_set` - 設定當前任務
-- `zcrystal_session_get` - 獲取 session 狀態
-- `zcrystal_session_clear` - 清除 session
-- `zcrystal_proactive_check` - 檢查待辦事項
-- `zcrystal_proactive_suggest` - 主動建議
-- `zcrystal_proactive_log` - 記錄行動
-- `zcrystal_proactive_recent` - 獲取最近行動
-
-#### 新增 Self-Improving Engine (11)
-- `zcrystal_correction_add/list` - 修正日誌
-- `zcrystal_heartbeat_run/status` - 心跳引擎
-- `zcrystal_layers_exchange` - 層交換
-- `zcrystal_predict` - 上下文預測
-- `zcrystal_pattern_add/list` - 模式學習
-- `zcrystal_log_action/recent` - 行動日誌
-- `zcrystal_selfimproving_status` - 系統狀態
-
-#### 新增自動觸發機制
-- Heartbeat: 每 5 分鐘自動執行
-- Proactive Check: 每 10 分鐘自動執行
-- EvolutionScheduler: 每 60 分鐘自動進化
-
-### 自動觸發的 Proactive 功能
+#### 自動觸發機制
 
 | 間隔 | 功能 |
 |------|------|
-| 每 5 分鐘 | Heartbeat (健康檢查 + 進化狀態) |
-| 每 10 分鐘 | Proactive Check (Session + 建議) |
-| 每 60 分鐘 | EvolutionScheduler (自動進化) |
-
-### GitHub 提交
-
-```
-aefc252 docs: Update README for v0.6.0 - 100 tools, Proactive AI
-5e66626 feat: Add auto-trigger mechanisms for heartbeat and proactive check
-2459b9b feat: Add Proactive Session Tracker
-56486a5 refactor: Integrate Self-Improving into existing ZCrystal system
-```
-
-### 工具總數：100
-
-### 完整功能覆蓋
-
-| 類別 | 功能 | 工具數 |
-|------|------|--------|
-| 核心系統 | UnifiedApiRouter, TaskLifecycle, MemoryLayers | 15 |
-| 技能系統 | Manager, Versioning, Indexer, Validator, Merger, Generator | 18 |
-| 進化系統 | SelfEvolutionEngine, EvolutionScheduler, Coordinator | 11 |
-| 安全保護 | CircuitBreaker, RateLimiter | 5 |
-| Proactive | Session Tracker, Self-Improving, Heartbeat | 12 |
-| 適配器 | OpenClawAdapter, ReplayRunner, Hooks | 13 |
-| 工作流 | WorkflowEngine | 6 |
-| 工具生態 | ToolHub, FTS5, Webhooks | 8 |
-| 其他 | Logger, Metrics, Commands | 12 |
-
-### Proactive 等級：Level 4（預測性主動）
+| 每 5 分鐘 | Heartbeat（健康檢查 + 進化狀態） |
+| 每 10 分鐘 | Proactive Check（Session + 建議） |
+| 每 60 分鐘 | EvolutionScheduler（自動進化） |
 
 ---
 
-## 版本歷史
+## [0.2.0] - 2026-04-18 | 2026-04-18
+
+### 🚀 功能擴展：Proactive AI + 自我改進引擎
+
+#### 新增 | Added
+
+**Proactive Session Tracker (7 工具)**
+- `zcrystal_session_set` — 設定當前任務
+- `zcrystal_session_get` — 獲取 session 狀態
+- `zcrystal_session_clear` — 清除 session
+- `zcrystal_proactive_check` — 檢查待辦事項和阻礙
+- `zcrystal_proactive_suggest` — 主動建議
+- `zcrystal_proactive_log` — 記錄行動
+- `zcrystal_proactive_recent` — 獲取最近行動
+
+**Self-Improving Engine (11 工具)**
+- `zcrystal_correction_add` — 添加修正
+- `zcrystal_correction_list` — 列出修正
+- `zcrystal_heartbeat_run` — 運行心跳
+- `zcrystal_heartbeat_status` — 心跳狀態
+- `zcrystal_layers_exchange` — 層交換
+- `zcrystal_predict` — 預測需求
+- `zcrystal_pattern_add` — 添加模式
+- `zcrystal_pattern_list` — 列出模式
+- `zcrystal_log_action` — 記錄動作
+- `zcrystal_log_recent` — 獲取最近日誌
+- `zcrystal_selfimproving_status` — 系統狀態
+
+**自動觸發機制**
+- Heartbeat：每 5 分鐘自動執行
+- Proactive Check：每 10 分鐘自動執行
+- EvolutionScheduler：每 60 分鐘自動進化
+
+#### 變更 | Changed
+
+- 從被動式回應升級為主動式預測
+- 系統狀態監控常駐化
+
+#### 工具總數：58
+
+---
+
+## [0.1.0] - 2026-04-14 | 2026-04-14
+
+### 🌱 初始發布：統一 API + 核心引擎
+
+#### 新增 | Added
+
+**核心引擎**
+- `UnifiedApiRouter` — 27+ 端點的統一 API 路由器
+- `SelfEvolutionEngine` — DSPy + GEPA 自我進化引擎
+- `EvolutionCoordinator` — 多技能協調器
+- `MemoryLayers` — L1-L5 多層記憶系統
+- `TaskLifecycle` — 任務生命週期管理
+- `ModelRouter` — 模型選擇路由器
+
+**基礎工具 (18 工具)**
+- `zcrystal_evo_health` — 健康檢查
+- `zcrystal_search` — Honcho 語義搜索
+- `zcrystal_ask_user` — 偏好查詢
+- `zcrystal_skills` — 技能列表
+- `zcrystal_skill_read` — 技能內容讀取
+- `zcrystal_evolution_status` — 進化狀態
+- `zcrystal_evolve` — 觸發進化
+- `zcrystal_task_create/get` — 任務管理
+- `zcrystal_memory_store/load` — 記憶存取
+- `zcrystal_model_pick` — 模型選擇
+- `zcrystal_fts5_search/stats` — FTS5 全文搜索
+
+**命令**
+- `/zcrystal_compact` — 壓縮 + 觸發進化
+- `/zcrystal_profile` — 查看個人檔案
+
+**鉤子**
+- `zcrystal:msg_received` — 從用戶輸入學習
+- `zcrystal:msg_sent` — 記錄 AI 回應
+
+#### 功能
+
+- 基本 Honcho 整合
+- 技能發現與管理
+- 自我進化原型
+- FTS5 整合（MCP HTTP 橋接）
+
+#### 工具總數：18
+
+---
+
+## 版本歷史 | Version History
 
 | 版本 | 日期 | 工具數 | 主要功能 |
 |------|------|--------|----------|
-| 0.3.0 | 2026-04-19 | 18 | 統一 API + 核心引擎 |
-| 0.3.1 | 2026-04-19 | 28 | ReviewEngine + ToolHub |
-| 0.3.2 | 2026-04-19 | 28 | RateLimiter + Logger |
-| 0.4.0 | 2026-04-19 | 39 | 完整 Gateway API |
-| 0.5.0 | 2026-04-19 | 58 | WorkflowEngine + Adapter |
-| 0.6.0 | 2026-04-19 | 75 | SkillVersioning + Indexer |
-| 0.7.0 | 2026-04-19 | 100 | Proactive AI + Self-Improving |
+| 0.3.0 | 2026-04-19 | 85 | 完整統一插件 + Proactive AI + Self-Evolution |
+| 0.2.0 | 2026-04-18 | 58 | Proactive AI + Self-Improving Engine |
+| 0.1.0 | 2026-04-14 | 18 | 統一 API + 核心引擎 |
 
 ---
 
-### Repository
+## Repository
+
+https://github.com/ZCrystalC33/zcrystal-plugin
+
+---
+
+# CHANGELOG
+
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+---
+
+## [0.3.0] - 2026-04-19
+
+### 🎉 Major Release: ZCrystal Unified Plugin
+
+> **v0.3.0** — 85 tools + Proactive AI + Self-Evolution + Skills System
+
+This release unifies the ZCrystal_evo core engine with the OpenClaw plugin system for full feature completeness.
+
+#### Added
+
+**Core Engine (15 tools)**
+- `UnifiedApiRouter` — Unified API router with 30+ endpoints
+- `MemoryLayers` — L1-L5 multi-layer memory system
+- `TaskLifecycle` — Task lifecycle management
+- `ModelRouter` — Model selection router
+- `RouterBridge` — Router bridge
+
+**Skills System (18 tools)**
+- `zcrystal_skills` — List skills
+- `zcrystal_skill_read` — Read skill content
+- `zcrystal_skill_generate` — Generate new skill
+- `zcrystal_skill_versions` — Version history
+- `zcrystal_skill_rollback` — Rollback version
+- `zcrystal_skill_generator_stats` — Generation statistics
+- `zcrystal_skill_version_create/get/list/diff/stats/rollback` — Version management
+- `zcrystal_skill_indexer_search/index/rebuild/stats` — Indexer system
+- `zcrystal_skill_validator_validate/validate_sync` — Validation system
+- `zcrystal_skill_merger_suggest` — Merge suggestion
+
+**Evolution System (11 tools)**
+- `zcrystal_evolution_status` — Evolution status
+- `zcrystal_evolve` — Trigger evolution
+- `SelfEvolutionEngine` — DSPy + GEPA self-evolution engine
+- `EvolutionScheduler` — Auto-evolution scheduler
+- `EvolutionCoordinator` — Multi-skill coordinator
+- `zcrystal_coordinator_status/register/evolve/queue` — Coordinator operations
+- `zcrystal_heartbeat_run/status` — Heartbeat engine
+
+**Safety Protection (5 tools)**
+- `zcrystal_circuit_status/reset/check` — Circuit breaker
+- `zcrystal_rate_status/check` — Rate limiter
+
+**Proactive AI (12 tools)**
+- `zcrystal_session_set/get/clear` — Session tracking
+- `zcrystal_proactive_check/suggest/log/recent` — Proactive check
+- `zcrystal_correction_add/list` — Correction log
+- `zcrystal_pattern_add/list` — Pattern learning
+- `zcrystal_layers_exchange` — Layer exchange
+- `zcrystal_predict` — Context prediction
+- `zcrystal_selfimproving_status` — System status
+
+**Workflow (6 tools)**
+- `zcrystal_workflow_create/get/stats/pause/resume/cancel` — WorkflowEngine
+
+**Adapters (13 tools)**
+- `zcrystal_openclaw_scan/import/export` — OpenClawSkillAdapter
+- `zcrystal_replay_save/get/list/stats/rollback` — ReplayRunner
+- `zcrystal_hooks_register/dispatch/list` — HookRegistry
+
+**Tool Ecosystem (8 tools)**
+- `zcrystal_toolhub_call/schema/logs` — ToolHub
+- `zcrystal_fts5_search/stats` — FTS5 full-text search
+- `zcrystal_webhook_register/dispatch/list` — Webhook system
+
+**Other (12 tools)**
+- `zcrystal_log` — Structured logging
+- `zcrystal_metrics_get/record` — Metrics collection
+- `zcrystal_model_pick` — Model selection
+- `zcrystal_review_stats/suggestions` — Review engine
+- `zcrystal_router_route/stats` — Router
+
+**Commands**
+- `/zcrystal_compact` — Compact + trigger evolution
+- `/zcrystal_learn` — Learn user preferences
+- `/zcrystal_profile` — View user profile
+
+#### Changed
+
+- Plugin renamed to `ZCrystal` (formerly ZCrystal-evo-plugin)
+- Unified architecture: single plugin, multiple capabilities
+- Tool descriptions fully updated
+
+#### Fixed
+
+- FTS5 search via MCP HTTP bridge (avoids sqlite3 CLI dependency)
+- Honcho ask endpoint graceful degradation
+- SkillManager path resolution
+- MCP HTTP connection stability
+
+#### Technical Improvements
+
+**Evolution Algorithm**
+```
+Stage 1: Generation (GEPA)
+  - constraints: Add explicit constraints
+  - examples: Add usage examples
+  - formatting: Improve Markdown
+  - clarity: Enhance language clarity
+
+Stage 2: Scoring (DSPy)
+  - content quality heuristics
+  - structure quality
+  - historical success rate
+
+Stage 3: Validation
+  - 20-trace closed-loop validation
+  - degradation threshold: 0.5
+
+Stage 4: Apply/Rollback
+  - score >= 0.5 → apply
+  - score < 0.5 → rollback
+```
+
+**Memory Layers**
+| Layer | Type | Persistence | Purpose |
+|-------|------|-------------|---------|
+| L1 | Working Memory | In-process | Current context |
+| L2 | Session Memory | In-process | Conversation (HOT layer) |
+| L3 | Short-Term Memory | Disk | Cross-session |
+| L4 | Long-Term Memory | Disk | Persistent |
+| L5 | Archive Memory | Disk | Cold storage |
+
+#### Auto-Trigger Mechanisms
+
+| Interval | Feature |
+|----------|---------|
+| Every 5 min | Heartbeat (health check + evolution status) |
+| Every 10 min | Proactive Check (Session + suggestions) |
+| Every 60 min | EvolutionScheduler (auto-evolution) |
+
+---
+
+## [0.2.0] - 2026-04-18
+
+### 🚀 Feature Expansion: Proactive AI + Self-Improving Engine
+
+#### Added
+
+**Proactive Session Tracker (7 tools)**
+- `zcrystal_session_set` — Set current task
+- `zcrystal_session_get` — Get session state
+- `zcrystal_session_clear` — Clear session
+- `zcrystal_proactive_check` — Check todos and blockers
+- `zcrystal_proactive_suggest` — Proactive suggestions
+- `zcrystal_proactive_log` — Log action
+- `zcrystal_proactive_recent` — Get recent actions
+
+**Self-Improving Engine (11 tools)**
+- `zcrystal_correction_add` — Add correction
+- `zcrystal_correction_list` — List corrections
+- `zcrystal_heartbeat_run` — Run heartbeat
+- `zcrystal_heartbeat_status` — Heartbeat status
+- `zcrystal_layers_exchange` — Layer exchange
+- `zcrystal_predict` — Predict needs
+- `zcrystal_pattern_add` — Add pattern
+- `zcrystal_pattern_list` — List patterns
+- `zcrystal_log_action` — Log action
+- `zcrystal_log_recent` — Get recent logs
+- `zcrystal_selfimproving_status` — System status
+
+**Auto-Trigger Mechanisms**
+- Heartbeat: runs every 5 minutes
+- Proactive Check: runs every 10 minutes
+- EvolutionScheduler: auto-evolution every 60 minutes
+
+#### Changed
+
+- Upgraded from reactive to proactive prediction
+- System status monitoring now persistent
+
+#### Total Tools: 58
+
+---
+
+## [0.1.0] - 2026-04-14
+
+### 🌱 Initial Release: Unified API + Core Engine
+
+#### Added
+
+**Core Engine**
+- `UnifiedApiRouter` — Unified API router with 27+ endpoints
+- `SelfEvolutionEngine` — DSPy + GEPA self-evolution engine
+- `EvolutionCoordinator` — Multi-skill coordinator
+- `MemoryLayers` — L1-L5 multi-layer memory system
+- `TaskLifecycle` — Task lifecycle management
+- `ModelRouter` — Model selection router
+
+**Base Tools (18 tools)**
+- `zcrystal_evo_health` — Health check
+- `zcrystal_search` — Honcho semantic search
+- `zcrystal_ask_user` — Preference query
+- `zcrystal_skills` — List skills
+- `zcrystal_skill_read` — Read skill content
+- `zcrystal_evolution_status` — Evolution status
+- `zcrystal_evolve` — Trigger evolution
+- `zcrystal_task_create/get` — Task management
+- `zcrystal_memory_store/load` — Memory access
+- `zcrystal_model_pick` — Model selection
+- `zcrystal_fts5_search/stats` — FTS5 full-text search
+
+**Commands**
+- `/zcrystal_compact` — Compact + trigger evolution
+- `/zcrystal_profile` — View user profile
+
+**Hooks**
+- `zcrystal:msg_received` — Learn from user input
+- `zcrystal:msg_sent` — Record AI response
+
+#### Features
+
+- Basic Honcho integration
+- Skill discovery and management
+- Self-evolution prototype
+- FTS5 integration (MCP HTTP bridge)
+
+#### Total Tools: 18
+
+---
+
+## Version History
+
+| Version | Date | Tools | Major Features |
+|---------|------|-------|----------------|
+| 0.3.0 | 2026-04-19 | 85 | Full unified plugin + Proactive AI + Self-Evolution |
+| 0.2.0 | 2026-04-18 | 58 | Proactive AI + Self-Improving Engine |
+| 0.1.0 | 2026-04-14 | 18 | Unified API + Core Engine |
+
+---
+
+## Repository
 
 https://github.com/ZCrystalC33/zcrystal-plugin
