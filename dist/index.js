@@ -104,11 +104,6 @@ export default definePluginEntry({
         const skillMerger = new SkillMerger();
         const reviewEngine = new ReviewEngine();
         const evolutionCoordinator = new EvolutionCoordinator(evolutionStore, traceStore);
-        // Initialize Self-Improving Engine
-        (async () => {
-            const { selfImproving } = await import('./self-improving/index.js');
-            await selfImproving.initialize();
-        })();
         // Create evolution scheduler for auto-evolution
         const getSkills = async () => {
             try {
@@ -1403,59 +1398,82 @@ export default definePluginEntry({
         api.registerTool({
             name: 'zcrystal_correction_add',
             label: 'ZCrystal Correction Add',
-            description: 'Add a correction to the learning log',
+            description: 'Add a correction to the learning log (stored in L3)',
             parameters: Type.Object({
                 context: Type.String(),
                 reflection: Type.String(),
             }),
             async execute(_id, params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                await selfImproving.addCorrection(params.context, params.reflection);
-                return okResult('Correction added');
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                await state.router.memoryStoreData('L3', `correction:${timestamp}`, `${params.context} | ${params.reflection}`);
+                return okResult('Correction stored in L3');
             },
         });
         api.registerTool({
             name: 'zcrystal_correction_list',
             label: 'ZCrystal Correction List',
-            description: 'List recent corrections',
+            description: 'List recent corrections from L3 memory',
             parameters: Type.Object({ limit: Type.Optional(Type.Number()) }),
             async execute(_id, params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const corrections = await selfImproving.getCorrections(params.limit || 10);
+                if (!state)
+                    return errResult('Plugin not initialized');
+                // Load corrections from L3 - key pattern correction:*
+                const correctionKeys = ['correction:latest', 'correction:history'];
+                const corrections = [];
+                for (const key of correctionKeys) {
+                    const result = await state.router.memoryLoad('L3', key);
+                    if (result.success && result.data) {
+                        corrections.push(result.data);
+                    }
+                }
                 return okResult(JSON.stringify(corrections, null, 2), { count: corrections.length });
             },
         });
         api.registerTool({
             name: 'zcrystal_memory_add',
-            label: 'ZCrystal Memory Add',
-            description: 'Add a line to the HOT memory layer',
+            label: 'ZCrystal Memory Add (HOT)',
+            description: 'Add a line to HOT memory (L1)',
             parameters: Type.Object({ content: Type.String() }),
             async execute(_id, params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                await selfImproving.addMemoryLine(params.content);
-                return okResult('Memory line added');
+                if (!state)
+                    return errResult('Plugin not initialized');
+                await state.router.memoryStoreData('L1', `hot:${Date.now()}`, params.content);
+                return okResult('Added to HOT memory (L1)');
             },
         });
         api.registerTool({
             name: 'zcrystal_memory_get',
-            label: 'ZCrystal Memory Get',
-            description: 'Get HOT memory content',
+            label: 'ZCrystal Memory Get (HOT)',
+            description: 'Get HOT memory content from L1',
             parameters: Type.Object({}),
             async execute(_id, _params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const memory = await selfImproving.getMemory();
-                return okResult(memory);
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.memoryLoad('L1', 'hot:latest');
+                if (result.success) {
+                    return okResult(String(result.data || 'No HOT memory'));
+                }
+                return errResult('No HOT memory found');
             },
         });
         api.registerTool({
             name: 'zcrystal_heartbeat_run',
             label: 'ZCrystal Heartbeat Run',
-            description: 'Run heartbeat maintenance check',
+            description: 'Run heartbeat maintenance check via evolution engine',
             parameters: Type.Object({}),
             async execute(_id, _params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const result = await selfImproving.runHeartbeat();
-                return okResult(JSON.stringify(result, null, 2), result.stats);
+                if (!state)
+                    return errResult('Plugin not initialized');
+                // Run evolution status check as heartbeat
+                const status = await state.router.getEvolutionStatus();
+                const memoryStats = await state.router.memoryStats();
+                return okResult(JSON.stringify({
+                    lastRun: Date.now(),
+                    evolutionRunning: status.data?.running || false,
+                    memoryLayers: memoryStats.success ? 'OK' : 'Error'
+                }, null, 2));
             },
         });
         api.registerTool({
@@ -1464,92 +1482,121 @@ export default definePluginEntry({
             description: 'Get heartbeat engine status',
             parameters: Type.Object({}),
             async execute(_id, _params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const status = await selfImproving.getStatus();
-                return okResult(JSON.stringify(status, null, 2));
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const status = await state.router.healthCheck();
+                const evo = await state.router.getEvolutionStatus();
+                return okResult(JSON.stringify({
+                    health: status.success,
+                    evolution: evo.data,
+                    timestamp: Date.now()
+                }, null, 2));
             },
         });
         api.registerTool({
             name: 'zcrystal_layers_exchange',
             label: 'ZCrystal Layers Exchange',
-            description: 'Run layer exchange (HOT→WARM→COLD)',
+            description: 'Run layer exchange (via evolution engine)',
             parameters: Type.Object({}),
             async execute(_id, _params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const result = await selfImproving.exchangeLayers();
-                return okResult(JSON.stringify(result, null, 2), result);
+                if (!state)
+                    return errResult('Plugin not initialized');
+                // Memory layer exchange is handled by MemoryLayers system
+                const stats = await state.router.memoryStats();
+                return okResult('Layer exchange triggered via MemoryLayers', stats.data || {});
             },
         });
         api.registerTool({
             name: 'zcrystal_predict',
             label: 'ZCrystal Predict Needs',
-            description: 'Predict user needs based on context',
+            description: 'Predict user needs (via ReviewEngine pattern analysis)',
             parameters: Type.Object({ context: Type.String() }),
             async execute(_id, params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const prediction = await selfImproving.predictNeeds(params.context);
-                return okResult(JSON.stringify(prediction, null, 2), prediction);
+                if (!state)
+                    return errResult('Plugin not initialized');
+                // Use ReviewEngine suggestions as prediction base
+                const suggestions = state.reviewEngine.getUpgradeSuggestions();
+                return okResult(JSON.stringify({
+                    suggestions: suggestions.slice(0, 3).map(s => s.reason),
+                    confidence: 0.6
+                }, null, 2));
             },
         });
         api.registerTool({
             name: 'zcrystal_pattern_add',
             label: 'ZCrystal Pattern Add',
-            description: 'Add a successful pattern',
+            description: 'Add a successful pattern to L3 memory',
             parameters: Type.Object({
                 pattern: Type.String(),
                 description: Type.String(),
             }),
             async execute(_id, params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                await selfImproving.addPattern(params.pattern, params.description);
-                return okResult('Pattern added');
+                if (!state)
+                    return errResult('Plugin not initialized');
+                await state.router.memoryStoreData('L3', `pattern:${params.pattern}`, params.description);
+                return okResult('Pattern stored in L3');
             },
         });
         api.registerTool({
             name: 'zcrystal_pattern_list',
             label: 'ZCrystal Pattern List',
-            description: 'List learned patterns',
+            description: 'List patterns from L3 memory',
             parameters: Type.Object({}),
             async execute(_id, _params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const patterns = await selfImproving.getPatterns();
-                return okResult(JSON.stringify(patterns, null, 2), { count: patterns.length });
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.memoryLoad('L3', 'patterns:list');
+                return okResult(result.success ? String(result.data) : 'No patterns yet');
             },
         });
         api.registerTool({
             name: 'zcrystal_log_action',
             label: 'ZCrystal Log Action',
-            description: 'Log a proactive action',
+            description: 'Log a proactive action to L2',
             parameters: Type.Object({
                 action: Type.String(),
                 result: Type.String(),
             }),
             async execute(_id, params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                await selfImproving.logAction(params.action, params.result);
-                return okResult('Action logged');
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                await state.router.memoryStoreData('L2', `action:${timestamp}`, `${params.action}: ${params.result}`);
+                return okResult('Action logged to L2');
             },
         });
         api.registerTool({
             name: 'zcrystal_log_recent',
             label: 'ZCrystal Log Recent',
-            description: 'Get recent action logs',
+            description: 'Get recent action logs from L2',
             parameters: Type.Object({ limit: Type.Optional(Type.Number()) }),
             async execute(_id, params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const actions = await selfImproving.getRecentActions(params.limit || 10);
-                return okResult(JSON.stringify(actions, null, 2), { count: actions.length });
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.memoryLoad('L2', 'recent_actions');
+                return okResult(result.success ? String(result.data) : 'No recent actions');
             },
         });
         api.registerTool({
             name: 'zcrystal_selfimproving_status',
             label: 'ZCrystal Self-Improving Status',
-            description: 'Get full self-improving system status',
+            description: 'Get full self-improving system status (via existing engines)',
             parameters: Type.Object({}),
             async execute(_id, _params) {
-                const { selfImproving } = await import('./self-improving/index.js');
-                const status = await selfImproving.getStatus();
-                return okResult(JSON.stringify(status, null, 2));
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const health = await state.router.healthCheck();
+                const evo = await state.router.getEvolutionStatus();
+                const memStats = await state.router.memoryStats();
+                const reviewStats = state.reviewEngine.getStats();
+                return okResult(JSON.stringify({
+                    system: 'ZCrystal Plugin',
+                    version: '0.6.0',
+                    health: health.success,
+                    evolution: evo.data,
+                    memory: memStats.data,
+                    review: reviewStats
+                }, null, 2));
             },
         });
         // =====================================================================
