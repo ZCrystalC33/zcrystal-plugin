@@ -1600,7 +1600,142 @@ export default definePluginEntry({
             },
         });
         // =====================================================================
-        // Commands    // =====================================================================
+        // Proactive Session Tracker
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_session_set',
+            label: 'ZCrystal Session Set',
+            description: 'Set current task/decision in session tracker',
+            parameters: Type.Object({
+                topic: Type.String(),
+                task: Type.String(),
+                decision: Type.Optional(Type.String()),
+                nextMove: Type.Optional(Type.String()),
+                blockers: Type.Optional(Type.String()),
+            }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const sessionData = {
+                    timestamp: new Date().toISOString(),
+                    topic: params.topic,
+                    task: params.task,
+                    decision: params.decision || '',
+                    nextMove: params.nextMove || '',
+                    blockers: params.blockers || ''
+                };
+                await state.router.memoryStoreData('L2', 'session:current', JSON.stringify(sessionData));
+                return okResult('Session updated: ' + params.topic);
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_session_get',
+            label: 'ZCrystal Session Get',
+            description: 'Get current session state',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.memoryLoad('L2', 'session:current');
+                if (result.success && result.data) {
+                    return okResult(String(result.data));
+                }
+                return okResult('No active session');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_session_clear',
+            label: 'ZCrystal Session Clear',
+            description: 'Clear current session',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                await state.router.memoryStoreData('L2', 'session:current', '');
+                return okResult('Session cleared');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_proactive_check',
+            label: 'ZCrystal Proactive Check',
+            description: 'Run proactive check for pending follow-ups and blockers',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const sessionResult = await state.router.memoryLoad('L2', 'session:current');
+                const suggestions = state.reviewEngine.getUpgradeSuggestions();
+                let message = 'Proactive check complete. ';
+                if (sessionResult.success && sessionResult.data) {
+                    try {
+                        const session = JSON.parse(String(sessionResult.data));
+                        if (session.blockers) {
+                            message += `Active blocker: ${session.blockers}. `;
+                        }
+                        if (session.nextMove) {
+                            message += `Next move: ${session.nextMove}. `;
+                        }
+                    }
+                    catch {
+                        // Ignore parse errors
+                    }
+                }
+                if (suggestions.length > 0) {
+                    message += `${suggestions.length} skill upgrade suggestions available.`;
+                }
+                else {
+                    message += 'No immediate action needed.';
+                }
+                return okResult(message, { suggestionsCount: suggestions.length });
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_proactive_suggest',
+            label: 'ZCrystal Proactive Suggest',
+            description: 'Get proactive suggestions based on patterns and history',
+            parameters: Type.Object({ context: Type.Optional(Type.String()) }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const suggestions = state.reviewEngine.getUpgradeSuggestions();
+                const patterns = await state.router.memoryLoad('L3', 'patterns:list');
+                const result = {
+                    skillSuggestions: suggestions.slice(0, 3),
+                    learnedPatterns: patterns.success ? String(patterns.data).split('\n').filter(Boolean) : [],
+                    context: params.context || 'general'
+                };
+                return okResult(JSON.stringify(result, null, 2), result);
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_proactive_log',
+            label: 'ZCrystal Proactive Log',
+            description: 'Log a proactive action taken',
+            parameters: Type.Object({
+                action: Type.String(),
+                outcome: Type.String(),
+            }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                await state.router.memoryStoreData('L2', `proactive:${timestamp}`, `${params.action} -> ${params.outcome}`);
+                return okResult('Proactive action logged');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_proactive_recent',
+            label: 'ZCrystal Proactive Recent',
+            description: 'Get recent proactive actions',
+            parameters: Type.Object({ limit: Type.Optional(Type.Number()) }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.router.memoryLoad('L2', 'proactive:recent');
+                return okResult(result.success ? String(result.data || 'No recent proactive actions') : 'No recent actions');
+            },
+        });
+        // =====================================================================
         // Commands
         // =====================================================================
         api.registerCommand({
