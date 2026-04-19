@@ -2,7 +2,7 @@
   "id": "zcrystal",
   "name": "ZCrystal",
   "description": "Honcho + Skills + Self-Evolution Plugin for OpenClaw",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "configSchema": {
     "type": "object",
     "properties": {

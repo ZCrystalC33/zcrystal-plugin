@@ -4,7 +4,7 @@
 
 格式基於 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)。
 
-## [0.1.0] - 2026-04-19
+## [0.3.0] - 2026-04-19
 
 ### 🎉 主要發布：ZCrystal 插件統一
 
