@@ -24,6 +24,8 @@
  * 12. Long-Running Agents - Initializer pattern
  * 13. Codex/AI Coding - Context-first design
  */
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 // ============================================================
 // Constants (Magic Number Replacement)
 // ============================================================
@@ -104,7 +106,7 @@ export class SelfEvolutionEngine {
     skillManager;
     honcho;
     traces = new Map();
-    dataDir = '/tmp/zcrystal';
+    dataDir = process.env.ZCRYSTAL_TEMP_PATH || join(tmpdir(), 'zcrystal');
     evolutionHistory = [];
     recoveryPoints = new Map();
     config;

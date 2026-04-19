@@ -34,6 +34,8 @@ import type {
 } from './types.js';
 import { SkillManager } from './skill-manager.js';
 import { HonchoClient } from './honcho-client.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // ============================================================
 // Constants (Magic Number Replacement)
@@ -206,7 +208,7 @@ export class SelfEvolutionEngine {
   private skillManager: SkillManager;
   private honcho?: HonchoClient;
   private traces: Map<string, ExecutionTrace[]> = new Map();
-  private dataDir: string = '/tmp/zcrystal';
+  private dataDir: string = process.env.ZCRYSTAL_TEMP_PATH || join(tmpdir(), 'zcrystal');
   private evolutionHistory: EvolutionResult[] = [];
   private recoveryPoints: Map<EvolutionId, RecoveryPointer> = new Map();
   private config: EvolutionConfig;

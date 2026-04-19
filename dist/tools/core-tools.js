@@ -24,7 +24,8 @@ export function registerCoreTools(api, state) {
         description: 'Search conversation history using Honcho',
         parameters: Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
         async execute(_id, params) {
-            const result = await state.honcho.search(params.query, params.limit || 10);
+            // Note: Type def says 2 args but impl has 3 - using any to bypass type check
+            const result = await state.honcho.search('*', params.query, params.limit || 10);
             if (result.ok)
                 return okResult(JSON.stringify(result.data, null, 2), { results: result.data });
             return errResult('Search failed');

@@ -26,6 +26,8 @@ export { okResult, errResult };
 const FTS5_MCP_URL = config.fts5.mcpUrl;
 async function fts5Search(query, limit = 20) {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         const response = await fetch(FTS5_MCP_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -34,8 +36,10 @@ async function fts5Search(query, limit = 20) {
                 method: 'tools/call',
                 params: { name: 'fts5_search', arguments: { query, limit } },
                 id: 2
-            })
+            }),
+            signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         const data = await response.json();
         if (data.result?.content?.[0]?.text) {
             return { success: true, data: data.result.content[0].text };
@@ -48,6 +52,8 @@ async function fts5Search(query, limit = 20) {
 }
 async function fts5Stats() {
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         const response = await fetch(FTS5_MCP_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -56,8 +62,10 @@ async function fts5Stats() {
                 method: 'tools/call',
                 params: { name: 'fts5_stats', arguments: {} },
                 id: 3
-            })
+            }),
+            signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         const data = await response.json();
         if (data.result?.content?.[0]?.text) {
             return { success: true, data: data.result.content[0].text };
