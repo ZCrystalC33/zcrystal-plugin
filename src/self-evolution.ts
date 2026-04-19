@@ -206,7 +206,7 @@ export class SelfEvolutionEngine {
   private skillManager: SkillManager;
   private honcho?: HonchoClient;
   private traces: Map<string, ExecutionTrace[]> = new Map();
-  private dataDir: string = '/home/snow/.openclaw/extensions/zcrystal/data';
+  private dataDir: string = '/tmp/zcrystal';
   private evolutionHistory: EvolutionResult[] = [];
   private recoveryPoints: Map<EvolutionId, RecoveryPointer> = new Map();
   private config: EvolutionConfig;

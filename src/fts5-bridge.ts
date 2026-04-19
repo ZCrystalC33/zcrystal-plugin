@@ -7,7 +7,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // Dynamically load the FTS5 module
-const FTS5_PATH = '/home/snow/.openclaw/skills/fts5';
+const FTS5_PATH = process.env.OPENCLAW_PATH ? process.env.OPENCLAW_PATH + '/skills/fts5' : '/home/snow/.openclaw/skills/fts5';
 
 interface FTS5Module {
   search: (query: string, limit?: number) => Promise<unknown[]>;

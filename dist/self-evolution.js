@@ -104,7 +104,7 @@ export class SelfEvolutionEngine {
     skillManager;
     honcho;
     traces = new Map();
-    dataDir = '/home/snow/.openclaw/extensions/zcrystal/data';
+    dataDir = '/tmp/zcrystal';
     evolutionHistory = [];
     recoveryPoints = new Map();
     config;

@@ -1,217 +1,282 @@
 /**
  * ZCrystal Onboarding Wizard
- * Guides users through complete system setup
+ * 
+ * Interactive setup wizard for first-time users
  */
 
-export interface OnboardingStep {
-  id: string;
-  title: string;
-  description: string;
-  validate: () => Promise<{ ok: boolean; message: string }>;
-  fix?: () => Promise<boolean>;
+import * as readline from 'node:readline';
+import { existsSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+
+// Colors for terminal output
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  cyan: '\x1b[36m',
+};
+
+const HOME = homedir();
+const DEFAULT_OPENCLAW_PATH = join(HOME, '.openclaw');
+const DEFAULT_DATA_PATH = join(DEFAULT_OPENCLAW_PATH, 'extensions', 'zcrystal');
+
+interface WizardAnswers {
+  openclawPath: string;
+  dataPath: string;
+  fts5Port: string;
+  evolutionInterval: number;
+  heartbeatInterval: number;
+  proactiveInterval: number;
+  autoStart: boolean;
+  enableFTS5: boolean;
 }
 
-export class OnboardingWizard {
-  private steps: OnboardingStep[] = [];
+function question(query: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
 
-  constructor() {
-    this.initSteps();
-  }
+  return new Promise((resolve) => {
+    rl.question(query, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
 
-  private initSteps() {
-    this.steps = [
-      {
-        id: 'check-openclaw',
-        title: '檢查 OpenClaw Gateway',
-        description: '確認 OpenClaw Gateway 正在運行',
-        validate: async () => {
-          try {
-            const resp = await fetch('http://localhost:18789/health') as any;
-            if (resp.ok) {
-              return { ok: true, message: '✅ Gateway 運行正常' };
-            }
-            return { ok: false, message: '❌ Gateway 回應異常' };
-          } catch {
-            return { ok: false, message: '❌ Gateway 未運行' };
-          }
-        }
-      },
-      {
-        id: 'check-honcho',
-        title: '檢查 Honcho 服務',
-        description: '確認 Honcho API 和資料庫正常運作',
-        validate: async () => {
-          try {
-            const resp = await fetch('http://localhost:8000/health') as any;
-            if (resp.ok) {
-              return { ok: true, message: '✅ Honcho API 運行正常' };
-            }
-            return { ok: false, message: '❌ Honcho API 回應異常' };
-          } catch {
-            return { ok: false, message: '❌ Honcho API 未運行' };
-          }
-        }
-      },
-      {
-        id: 'check-fts5',
-        title: '檢查 FTS5 索引',
-        description: '確認 FTS5 對話搜尋功能正常',
-        validate: async () => {
-          try {
-            const resp = await fetch('http://localhost:18789/tools/list') as any;
-            if (resp.ok) {
-              const data = await resp.json() as any;
-              const hasFts5 = data.tools?.some((t: any) => t.name === 'fts5_search');
-              return hasFts5 
-                ? { ok: true, message: '✅ FTS5 工具已註冊' }
-                : { ok: true, message: '⚠️ FTS5 工具未找到（將使用直接 import）' };
-            }
-            return { ok: true, message: '⚠️ 無法檢查工具列表（直接 import 可用）' };
-          } catch {
-            return { ok: true, message: '⚠️ 無法連接 Gateway（直接 import 可用）' };
-          }
-        }
-      },
-      {
-        id: 'check-plugin',
-        title: '檢查 ZCrystal Plugin',
-        description: '確認 ZCrystal 插件已正確安裝',
-        validate: async () => {
-          try {
-            const resp = await fetch('http://localhost:18789/health') as any;
-            const data = await resp.json() as any;
-            return { 
-              ok: true, 
-              message: data.extensions?.zcrystal 
-                ? '✅ ZCrystal Plugin 已載入' 
-                : '⚠️ 請重啟 Gateway 載入插件'
-            };
-          } catch {
-            return { ok: false, message: '❌ 無法檢查插件狀態' };
-          }
-        }
-      },
-      {
-        id: 'test-chat',
-        title: '測試即時通訊',
-        description: '驗證 Telegram 和 Discord Bot 功能',
-        validate: async () => {
-          try {
-            const resp = await fetch('http://localhost:18789/health') as any;
-            const data = await resp.json() as any;
-            
-            const hasTelegram = data.providers?.telegram;
-            const hasDiscord = data.providers?.discord;
-            
-            if (hasTelegram && hasDiscord) {
-              return { ok: true, message: '✅ Telegram 和 Discord Bot 已啟動' };
-            } else if (hasTelegram) {
-              return { ok: true, message: '⚠️ 只有 Telegram Bot 運行中' };
-            } else if (hasDiscord) {
-              return { ok: true, message: '⚠️ 只有 Discord Bot 運行中' };
-            } else {
-              return { ok: false, message: '❌ 沒有運行的 Bot' };
-            }
-          } catch {
-            return { ok: false, message: '❌ 無法檢查 Bot 狀態' };
-          }
-        }
-      }
-    ];
-  }
+function printHeader(text: string): void {
+  console.log('\n' + colors.blue + '='.repeat(50) + colors.reset);
+  console.log(colors.bright + text + colors.reset);
+  console.log(colors.blue + '='.repeat(50) + colors.reset + '\n');
+}
 
-  async run(): Promise<{ success: boolean; report: string }> {
-    const report: string[] = [];
-    
-    report.push('╔════════════════════════════════════════════════╗');
-    report.push('║       ZCrystal Onboarding Wizard              ║');
-    report.push('╚════════════════════════════════════════════════╝');
-    report.push('');
+function printStep(step: number, total: number, text: string): void {
+  console.log(colors.green + `[${step}/${total}]` + colors.reset + ' ' + text);
+}
 
-    for (let i = 0; i < this.steps.length; i++) {
-      const step = this.steps[i];
-      report.push(`\n【步驟 ${i + 1}/${this.steps.length}】 ${step.title}`);
-      report.push(`  ${step.description}`);
-      
-      const result = await step.validate();
-      report.push(`  結果: ${result.message}`);
-      
-      if (!result.ok && step.fix) {
-        report.push(`  嘗試自動修復...`);
-        const fixed = await step.fix();
-        if (fixed) {
-          const retry = await step.validate();
-          report.push(`  修復後: ${retry.message}`);
-        }
-      }
-      
-      report.push('');
+function printSuccess(text: string): void {
+  console.log(colors.green + '✓' + colors.reset + ' ' + text);
+}
+
+function printWarning(text: string): void {
+  console.log(colors.yellow + '!' + colors.reset + ' ' + text);
+}
+
+async function detectOpenClaw(): Promise<string> {
+  const paths = [
+    join(HOME, '.openclaw'),
+    '/root/.openclaw',
+    '/home/openclaw/.openclaw',
+  ];
+
+  for (const path of paths) {
+    if (existsSync(path)) {
+      return path;
     }
+  }
 
-    report.push('═'.repeat(50));
-    report.push('系統狀態摘要');
-    report.push('═'.repeat(50));
+  return DEFAULT_OPENCLAW_PATH;
+}
 
-    const summary = await this.getSystemSummary();
-    report.push(...summary);
+async function askOpenClawPath(): Promise<string> {
+  const detected = await detectOpenClaw();
+  printWarning(`Detected OpenClaw at: ${detected}`);
 
-    report.push('');
-    report.push('✅ ZCrystal Onboarding 完成！');
-    report.push('');
-    report.push('後續步驟:');
-    report.push('  1. 使用 /zcrystal_profile 查看用戶分析');
-    report.push('  2. 使用 /zcrystal_stats 查看系統統計');
-    report.push('  3. 發送任何訊息測試 Hook 學習功能');
+  const answer = await question('Enter OpenClaw path (or press Enter for default): ');
+  return answer.trim() || detected;
+}
 
-    return {
-      success: true,
-      report: report.join('\n')
+async function askDataPath(): Promise<string> {
+  const defaultPath = join(DEFAULT_DATA_PATH);
+  const answer = await question(`Enter ZCrystal data path (or press Enter for default): `);
+  return answer.trim() || defaultPath;
+}
+
+async function askFTS5Port(): Promise<string> {
+  const answer = await question('Enter FTS5 MCP port (default: 18795): ');
+  return answer.trim() || '18795';
+}
+
+async function askEvolutionInterval(): Promise<number> {
+  printWarning('Evolution runs automatically every 60 minutes by default');
+  const answer = await question('Evolution interval in minutes (default: 60): ');
+  const minutes = parseInt(answer.trim()) || 60;
+  return minutes * 60 * 1000; // Convert to milliseconds
+}
+
+async function askHeartbeatInterval(): Promise<number> {
+  printWarning('Heartbeat checks run every 5 minutes by default');
+  const answer = await question('Heartbeat interval in minutes (default: 5): ');
+  const minutes = parseInt(answer.trim()) || 5;
+  return minutes * 60 * 1000;
+}
+
+async function askProactiveInterval(): Promise<number> {
+  printWarning('Proactive checks run every 10 minutes by default');
+  const answer = await question('Proactive check interval in minutes (default: 10): ');
+  const minutes = parseInt(answer.trim()) || 10;
+  return minutes * 60 * 1000;
+}
+
+async function askAutoStart(): Promise<boolean> {
+  const answer = await question('Enable auto-evolution on startup? (y/N): ');
+  return answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes';
+}
+
+async function askEnableFTS5(): Promise<boolean> {
+  const answer = await question('Enable FTS5 search integration? (Y/n): ');
+  return answer.toLowerCase() !== 'n' && answer.toLowerCase() !== 'no';
+}
+
+async function createConfigFile(answers: WizardAnswers): Promise<void> {
+  const configPath = join(answers.openclawPath, 'extensions', 'zcrystal', 'config.json');
+
+  const config = {
+    version: '0.7.0',
+    paths: {
+      openclaw: answers.openclawPath,
+      data: answers.dataPath,
+      skills: join(answers.openclawPath, 'skills'),
+      temp: '/tmp/zcrystal',
+    },
+    fts5: {
+      mcpUrl: `http://localhost:${answers.fts5Port}/mcp`,
+      port: answers.fts5Port,
+      path: join(answers.openclawPath, 'skills', 'fts5'),
+      enabled: answers.enableFTS5,
+    },
+    intervals: {
+      evolution: answers.evolutionInterval,
+      heartbeat: answers.heartbeatInterval,
+      proactive: answers.proactiveInterval,
+    },
+    autoStart: {
+      evolution: answers.autoStart,
+    },
+    createdAt: new Date().toISOString(),
+  };
+
+  // Ensure directory exists
+  const dir = join(answers.dataPath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  writeFileSync(configPath, JSON.stringify(config, null, 2));
+  printSuccess(`Configuration saved to: ${configPath}`);
+}
+
+async function createEnvFile(answers: WizardAnswers): Promise<void> {
+  const envPath = join(answers.openclawPath, '.env');
+
+  const envContent = `
+# ZCrystal Plugin Configuration
+ZCRYSTAL_DATA_PATH=${answers.dataPath}
+ZCRYSTAL_SKILLS_PATH=${join(answers.openclawPath, 'skills')}
+ZCRYSTAL_FTS5_PORT=${answers.fts5Port}
+ZCRYSTAL_EVOLUTION_INTERVAL=${answers.evolutionInterval}
+ZCRYSTAL_HEARTBEAT_INTERVAL=${answers.heartbeatInterval}
+ZCRYSTAL_PROACTIVE_INTERVAL=${answers.proactiveInterval}
+`.trim();
+
+  if (existsSync(envPath)) {
+    if (!envContent.split('\n').every(line => line.includes('ZCRYSTAL'))) {
+      appendFileSync(envPath, '\n' + envContent);
+    }
+    printSuccess('Environment variables appended to: ' + envPath);
+  } else {
+    writeFileSync(envPath, envContent + '\n');
+    printSuccess('Environment variables saved to: ' + envPath);
+  }
+}
+
+export async function runOnboarding(): Promise<void> {
+  printHeader('ZCrystal Plugin - Onboarding Wizard');
+
+  console.log('This wizard will help you configure ZCrystal Plugin.\n');
+
+  try {
+    // Step 1: OpenClaw path
+    printStep(1, 8, 'OpenClaw Installation Path');
+    const openclawPath = await askOpenClawPath();
+
+    // Step 2: Data path
+    printStep(2, 8, 'ZCrystal Data Directory');
+    const dataPath = await askDataPath();
+
+    // Step 3: FTS5 Port
+    printStep(3, 8, 'FTS5 MCP Server Port');
+    const fts5Port = await askFTS5Port();
+
+    // Step 4: Evolution interval
+    printStep(4, 8, 'Evolution Schedule');
+    const evolutionInterval = await askEvolutionInterval();
+
+    // Step 5: Heartbeat interval
+    printStep(5, 8, 'Heartbeat Schedule');
+    const heartbeatInterval = await askHeartbeatInterval();
+
+    // Step 6: Proactive interval
+    printStep(6, 8, 'Proactive Check Schedule');
+    const proactiveInterval = await askProactiveInterval();
+
+    // Step 7: Auto-start
+    printStep(7, 8, 'Startup Options');
+    const autoStart = await askAutoStart();
+
+    // Step 8: FTS5
+    printStep(8, 8, 'FTS5 Integration');
+    const enableFTS5 = await askEnableFTS5();
+
+    // Create configuration
+    const answers: WizardAnswers = {
+      openclawPath,
+      dataPath,
+      fts5Port,
+      evolutionInterval,
+      heartbeatInterval,
+      proactiveInterval,
+      autoStart,
+      enableFTS5,
     };
-  }
 
-  private async getSystemSummary(): Promise<string[]> {
-    const lines: string[] = [];
-    
-    try {
-      const gw = await fetch('http://localhost:18789/health') as any;
-      const gwData = await gw.json() as any;
-      lines.push(`  Gateway: ${gwData.ok ? '✅' : '❌'} ${gwData.status}`);
-      
-      const hc = await fetch('http://localhost:8000/health') as any;
-      lines.push(`  Honcho: ${hc.ok ? '✅' : '❌'}`);
-      
-      lines.push(`  FTS5: ✅ 246k+ 消息索引`);
-      lines.push(`  SelfEvolution: ✅ 每小時自動運行`);
-      
-    } catch (err) {
-      lines.push(`  Error checking status`);
-    }
-    
-    return lines;
+    console.log('\n' + colors.blue + '-'.repeat(50) + colors.reset);
+    console.log('Creating configuration files...');
+
+    await createConfigFile(answers);
+    await createEnvFile(answers);
+
+    // Summary
+    console.log('\n' + colors.green + '✓ Configuration complete!' + colors.reset + '\n');
+    console.log('Summary:');
+    console.log('  OpenClaw Path:      ' + openclawPath);
+    console.log('  Data Path:          ' + dataPath);
+    console.log('  FTS5 Port:           ' + fts5Port);
+    console.log('  Evolution Interval:  ' + (evolutionInterval / 60000) + ' minutes');
+    console.log('  Heartbeat Interval:  ' + (heartbeatInterval / 60000) + ' minutes');
+    console.log('  Proactive Interval:  ' + (proactiveInterval / 60000) + ' minutes');
+    console.log('  Auto-start:          ' + (autoStart ? 'Yes' : 'No'));
+    console.log('  FTS5 Enabled:        ' + (enableFTS5 ? 'Yes' : 'No'));
+    console.log('');
+
+    console.log('Next steps:');
+    console.log('  1. Restart OpenClaw to load the plugin');
+    console.log('  2. Run: zcrystal_evo_health to check status');
+    console.log('');
+
+  } catch (error) {
+    console.error(colors.red + 'Onboarding failed:', error + colors.reset);
+    process.exit(1);
   }
 }
 
-// Quick status function
-export async function getQuickStatus(): Promise<string> {
-  const lines: string[] = [];
-  
-  try {
-    const gw = await fetch('http://localhost:18789/health') as any;
-    const gwData = await gw.json() as any;
-    lines.push(`Gateway: ${gwData.ok ? '✅' : '❌'}`);
-  } catch {
-    lines.push('Gateway: ❌');
-  }
-  
-  try {
-    const hc = await fetch('http://localhost:8000/health') as any;
-    lines.push(`Honcho: ${hc.ok ? '✅' : '❌'}`);
-  } catch {
-    lines.push('Honcho: ❌');
-  }
-  
-  lines.push(`FTS5: ✅ 正常`);
-  lines.push(`SelfEvolution: ✅ 運行中`);
-  
-  return lines.join('\n');
+// Run if executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runOnboarding().catch(console.error);
 }

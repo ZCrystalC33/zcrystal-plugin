@@ -8,6 +8,7 @@
  */
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { Type } from '@sinclair/typebox';
+import { config } from './config.js';
 import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, EvolutionCoordinator, EvolutionScheduler, ReviewEngine, ToolHub, SkillGenerator, SkillVersioning, SkillIndexer, SkillValidator, SkillMerger, CircuitBreaker, RateLimiter, StructuredLogger, Metrics, WorkflowEngine, OpenClawSkillAdapter, SkillSyncManager, ReplayRunner, HookRegistry, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
 let state = null;
 function okResult(text, details) {
@@ -19,7 +20,7 @@ function errResult(text) {
 // ============================================================================
 // FTS5 MCP HTTP Client
 // ============================================================================
-const FTS5_MCP_URL = 'http://localhost:18795/mcp';
+const FTS5_MCP_URL = config.fts5.mcpUrl;
 async function fts5Search(query, limit = 20) {
     try {
         const response = await fetch(FTS5_MCP_URL, {
@@ -75,8 +76,8 @@ export default definePluginEntry({
         console.log('[ZCrystal] Initializing with ZCrystal_evo...');
         const router = new UnifiedApiRouter();
         const honcho = createHonchoClient({ baseUrl: 'http://localhost:8000', workspace: 'openclaw' });
-        const skillManager = createSkillManager('/home/snow/.openclaw/skills');
-        const diskStore = new DiskStore('/tmp/zcrystal-stores');
+        const skillManager = createSkillManager(config.paths.skills);
+        const diskStore = new DiskStore(config.paths.temp);
         const evolutionStore = new EvolutionStore(diskStore);
         const traceStore = new TraceStore(diskStore);
         const selfEvolution = new SelfEvolutionEngine(evolutionStore, traceStore);
@@ -92,8 +93,8 @@ export default definePluginEntry({
         const metrics = new Metrics();
         const workflowEngine = new WorkflowEngine();
         const skillAdapter = new OpenClawSkillAdapter({
-            openClawSkillsPath: '~/.openclaw/skills',
-            zCrystalSkillsPath: '~/.openclaw/zcrystal/skills',
+            openClawSkillsPath: config.paths.skills,
+            zCrystalSkillsPath: config.paths.data + '/skills',
         });
         const skillSyncManager = new SkillSyncManager(skillAdapter);
         const replayRunner = new ReplayRunner();

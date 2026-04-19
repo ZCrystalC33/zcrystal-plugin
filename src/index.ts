@@ -10,6 +10,7 @@
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
+import { config } from './config.js';
 
 import {
   UnifiedApiRouter,
@@ -86,7 +87,7 @@ function errResult(text: string) {
 // FTS5 MCP HTTP Client
 // ============================================================================
 
-const FTS5_MCP_URL = 'http://localhost:18795/mcp';
+const FTS5_MCP_URL = config.fts5.mcpUrl;
 
 async function fts5Search(query: string, limit = 20) {
   try {
@@ -146,9 +147,9 @@ export default definePluginEntry({
     
     const router = new UnifiedApiRouter();
     const honcho = createHonchoClient({ baseUrl: 'http://localhost:8000', workspace: 'openclaw' });
-    const skillManager = createSkillManager('/home/snow/.openclaw/skills');
+    const skillManager = createSkillManager(config.paths.skills);
     
-    const diskStore = new DiskStore('/tmp/zcrystal-stores');
+    const diskStore = new DiskStore(config.paths.temp);
     const evolutionStore = new EvolutionStore(diskStore);
     const traceStore = new TraceStore(diskStore);
     const selfEvolution = new SelfEvolutionEngine(evolutionStore, traceStore);
@@ -165,8 +166,8 @@ export default definePluginEntry({
     const metrics = new Metrics();
     const workflowEngine = new WorkflowEngine();
     const skillAdapter = new OpenClawSkillAdapter({
-      openClawSkillsPath: '~/.openclaw/skills',
-      zCrystalSkillsPath: '~/.openclaw/zcrystal/skills',
+      openClawSkillsPath: config.paths.skills,
+      zCrystalSkillsPath: config.paths.data + '/skills',
     });
     const skillSyncManager = new SkillSyncManager(skillAdapter);
     const replayRunner = new ReplayRunner();

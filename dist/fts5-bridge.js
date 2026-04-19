@@ -4,7 +4,7 @@
  */
 import * as path from 'path';
 // Dynamically load the FTS5 module
-const FTS5_PATH = '/home/snow/.openclaw/skills/fts5';
+const FTS5_PATH = process.env.OPENCLAW_PATH ? process.env.OPENCLAW_PATH + '/skills/fts5' : '/home/snow/.openclaw/skills/fts5';
 let _fts5 = null;
 async function getFTS5() {
     if (_fts5)
