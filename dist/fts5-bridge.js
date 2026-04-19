@@ -1,52 +1,81 @@
 /**
  * FTS5 Bridge - Direct import to bypass MCP stdio issues
- * Uses direct import instead of MCP protocol
+ *
+ * NOTE: Direct Python import is not yet implemented.
+ * The plugin uses MCP HTTP fallback via config.fts5.mcpUrl
+ * This bridge is a placeholder for future direct import support.
  */
-import * as path from 'path';
-// Dynamically load the FTS5 module
-const FTS5_PATH = process.env.OPENCLAW_PATH ? process.env.OPENCLAW_PATH + '/skills/fts5' : '/home/snow/.openclaw/skills/fts5';
-let _fts5 = null;
-async function getFTS5() {
-    if (_fts5)
-        return _fts5;
+import { config } from './config.js';
+// FTS5 HTTP MCP URL - used by the plugin directly in index.ts
+const FTS5_MCP_URL = config.fts5.mcpUrl;
+const FTS5_PORT = config.fts5.port;
+// HTTP-based FTS5 client (used as fallback when direct import unavailable)
+export async function fts5HttpSearch(query, limit = 20) {
     try {
-        // Import using dynamic import for ESM module
-        const modulePath = path.join(FTS5_PATH, '__init__.py');
-        console.log('[FTS5-Bridge] Direct import not yet implemented - using MCP fallback');
-        // For now, return a mock that logs usage
-        _fts5 = {
-            search: async (query, limit = 5) => {
-                console.log('[FTS5-Bridge] search called:', query, limit);
-                return [];
-            },
-            summarize: async (query, limit = 5) => {
-                console.log('[FTS5-Bridge] summarize called:', query, limit);
-                return 'Summary not available via direct import';
-            },
-            get_stats: async () => {
-                console.log('[FTS5-Bridge] get_stats called');
-                return { total: 0 };
+        const response = await fetch(FTS5_MCP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'tools/call',
+                params: { name: 'fts5_search', arguments: { query, limit } },
+                id: 2
+            })
+        });
+        const data = await response.json();
+        if (data.result?.content?.[0]?.text) {
+            // Parse the JSON text result
+            try {
+                return JSON.parse(data.result.content[0].text);
             }
-        };
-        return _fts5;
+            catch {
+                return [{ content: data.result.content[0].text, score: 1.0 }];
+            }
+        }
+        return [];
     }
-    catch (err) {
-        console.error('[FTS5-Bridge] Failed to load FTS5:', err);
-        throw err;
+    catch (e) {
+        console.error('[FTS5-Bridge] HTTP search failed:', e);
+        return [];
     }
 }
-export const fts5Bridge = {
-    async search(query, limit = 5) {
-        const fts5 = await getFTS5();
-        return fts5.search(query, limit);
-    },
-    async summarize(query, limit = 5) {
-        const fts5 = await getFTS5();
-        return fts5.summarize(query, limit);
-    },
-    async get_stats() {
-        const fts5 = await getFTS5();
-        return fts5.get_stats();
+export async function fts5HttpStats() {
+    try {
+        const response = await fetch(FTS5_MCP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'tools/call',
+                params: { name: 'fts5_stats', arguments: {} },
+                id: 3
+            })
+        });
+        const data = await response.json();
+        if (data.result?.content?.[0]?.text) {
+            try {
+                return JSON.parse(data.result.content[0].text);
+            }
+            catch {
+                return { total: 0, last_updated: new Date().toISOString() };
+            }
+        }
+        return { total: 0, last_updated: new Date().toISOString() };
     }
+    catch (e) {
+        console.error('[FTS5-Bridge] HTTP stats failed:', e);
+        return { total: 0, last_updated: new Date().toISOString() };
+    }
+}
+// Re-export for compatibility
+export const fts5Bridge = {
+    search: fts5HttpSearch,
+    summarize: async (query, limit = 5) => {
+        const results = await fts5HttpSearch(query, limit);
+        if (results.length === 0)
+            return 'No results found';
+        return results.map(r => r.content).join('\n---\n');
+    },
+    get_stats: fts5HttpStats
 };
 //# sourceMappingURL=fts5-bridge.js.map

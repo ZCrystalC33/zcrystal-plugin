@@ -5,12 +5,14 @@
  */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 // Default paths (can be overridden by environment variables)
 const HOME = process.env.HOME || homedir();
 const OPENCLAW_PATH = process.env.OPENCLAW_PATH || join(HOME, '.openclaw');
 const DATA_PATH = process.env.ZCRYSTAL_DATA_PATH || join(OPENCLAW_PATH, 'extensions', 'zcrystal', 'data');
 const SKILLS_PATH = process.env.ZCRYSTAL_SKILLS_PATH || join(OPENCLAW_PATH, 'skills');
-const TEMP_PATH = process.env.ZCRYSTAL_TEMP_PATH || '/tmp/zcrystal';
+// FIX: Use os.tmpdir() instead of hardcoded /tmp/zcrystal
+const TEMP_PATH = process.env.ZCRYSTAL_TEMP_PATH || join(tmpdir(), 'zcrystal');
 // FTS5 MCP URL
 const FTS5_PORT = process.env.ZCRYSTAL_FTS5_PORT || '18795';
 const FTS5_MCP_URL = process.env.ZCRYSTAL_FTS5_URL || `http://localhost:${FTS5_PORT}/mcp`;
