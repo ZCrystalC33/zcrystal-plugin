@@ -8,7 +8,7 @@
  */
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { Type } from '@sinclair/typebox';
-import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, EvolutionCoordinator, ReviewEngine, ToolHub, SkillGenerator, SkillVersioning, SkillIndexer, SkillValidator, SkillMerger, CircuitBreaker, RateLimiter, StructuredLogger, Metrics, WorkflowEngine, OpenClawSkillAdapter, SkillSyncManager, ReplayRunner, HookRegistry, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
+import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, EvolutionCoordinator, EvolutionScheduler, ReviewEngine, ToolHub, SkillGenerator, SkillVersioning, SkillIndexer, SkillValidator, SkillMerger, CircuitBreaker, RateLimiter, StructuredLogger, Metrics, WorkflowEngine, OpenClawSkillAdapter, SkillSyncManager, ReplayRunner, HookRegistry, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
 let state = null;
 function okResult(text, details) {
     return { content: [{ type: 'text', text }], details: details ?? {} };
@@ -104,8 +104,27 @@ export default definePluginEntry({
         const skillMerger = new SkillMerger();
         const reviewEngine = new ReviewEngine();
         const evolutionCoordinator = new EvolutionCoordinator(evolutionStore, traceStore);
+        // Create evolution scheduler for auto-evolution
+        const getSkills = async () => {
+            try {
+                if (state?.skillManager) {
+                    const result = await state.skillManager.discover();
+                    if (result.ok && result.data) {
+                        return result.data.map((s) => ({ slug: s.slug || s.id || '', content: s.content || '' }));
+                    }
+                }
+            }
+            catch (e) {
+                // Ignore errors
+            }
+            return [];
+        };
+        const evolutionScheduler = new EvolutionScheduler(evolutionCoordinator, getSkills, 60 * 60 * 1000 // 1 hour interval
+        );
+        // Start auto-evolution (disabled by default, use tool to enable)
+        // evolutionScheduler.start();
         state = {
-            router, honcho, skillManager, selfEvolution, evolutionCoordinator, reviewEngine,
+            router, honcho, skillManager, selfEvolution, evolutionCoordinator, evolutionScheduler, reviewEngine,
             toolHub, skillGenerator, skillVersioning, skillIndexer, skillValidator, skillMerger,
             circuitBreaker, rateLimiter, logger, metrics, workflowEngine,
             skillAdapter, skillSyncManager, replayRunner, hookRegistry
@@ -1341,6 +1360,36 @@ export default definePluginEntry({
                 if (!state)
                     return errResult('Plugin not initialized');
                 return okResult(JSON.stringify({ status: 'Use coordinator_status to check progress' }, null, 2));
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_scheduler_start',
+            label: 'ZCrystal Scheduler Start',
+            description: 'Start auto-evolution scheduler',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                if (state.evolutionScheduler) {
+                    state.evolutionScheduler.start();
+                    return okResult('Auto-evolution scheduler started');
+                }
+                return errResult('Scheduler not available');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_scheduler_stop',
+            label: 'ZCrystal Scheduler Stop',
+            description: 'Stop auto-evolution scheduler',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                if (state.evolutionScheduler) {
+                    state.evolutionScheduler.stop();
+                    return okResult('Auto-evolution scheduler stopped');
+                }
+                return errResult('Scheduler not available');
             },
         });
         // =====================================================================

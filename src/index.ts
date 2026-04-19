@@ -17,6 +17,7 @@ import {
   createSkillManager,
   SelfEvolutionEngine,
   EvolutionCoordinator,
+  EvolutionScheduler,
   ReviewEngine,
   ToolHub,
   SkillGenerator,
@@ -52,6 +53,7 @@ interface PluginState {
   skillManager: ReturnType<typeof createSkillManager>;
   selfEvolution: SelfEvolutionEngine;
   evolutionCoordinator: EvolutionCoordinator;
+  evolutionScheduler?: EvolutionScheduler;
   toolHub: ToolHub;
   skillGenerator: SkillGenerator;
   skillVersioning: SkillVersioning;
@@ -176,8 +178,31 @@ export default definePluginEntry({
     const reviewEngine = new ReviewEngine();
     const evolutionCoordinator = new EvolutionCoordinator(evolutionStore, traceStore);
     
+    // Create evolution scheduler for auto-evolution
+    const getSkills = async () => {
+      try {
+        if (state?.skillManager) {
+          const result = await state.skillManager.discover();
+          if (result.ok && result.data) {
+            return result.data.map((s: any) => ({ slug: s.slug || s.id || '', content: s.content || '' }));
+          }
+        }
+      } catch (e) {
+        // Ignore errors
+      }
+      return [];
+    };
+    const evolutionScheduler = new EvolutionScheduler(
+      evolutionCoordinator,
+      getSkills,
+      60 * 60 * 1000 // 1 hour interval
+    );
+    
+    // Start auto-evolution (disabled by default, use tool to enable)
+    // evolutionScheduler.start();
+    
     state = { 
-      router, honcho, skillManager, selfEvolution, evolutionCoordinator, reviewEngine,
+      router, honcho, skillManager, selfEvolution, evolutionCoordinator, evolutionScheduler, reviewEngine,
       toolHub, skillGenerator, skillVersioning, skillIndexer, skillValidator, skillMerger,
       circuitBreaker, rateLimiter, logger, metrics, workflowEngine,
       skillAdapter, skillSyncManager, replayRunner, hookRegistry
@@ -1456,6 +1481,38 @@ export default definePluginEntry({
         return okResult(JSON.stringify({ status: 'Use coordinator_status to check progress' }, null, 2));
       },
     });
+
+    api.registerTool({
+      name: 'zcrystal_scheduler_start',
+      label: 'ZCrystal Scheduler Start',
+      description: 'Start auto-evolution scheduler',
+      parameters: Type.Object({}),
+      async execute(_id, _params) {
+        if (!state) return errResult('Plugin not initialized');
+        if (state.evolutionScheduler) {
+          state.evolutionScheduler.start();
+          return okResult('Auto-evolution scheduler started');
+        }
+        return errResult('Scheduler not available');
+      },
+    });
+
+    api.registerTool({
+      name: 'zcrystal_scheduler_stop',
+      label: 'ZCrystal Scheduler Stop',
+      description: 'Stop auto-evolution scheduler',
+      parameters: Type.Object({}),
+      async execute(_id, _params) {
+        if (!state) return errResult('Plugin not initialized');
+        if (state.evolutionScheduler) {
+          state.evolutionScheduler.stop();
+          return okResult('Auto-evolution scheduler stopped');
+        }
+        return errResult('Scheduler not available');
+      },
+    });
+
+
 
     // =====================================================================
     // Commands
