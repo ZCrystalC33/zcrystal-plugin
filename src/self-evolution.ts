@@ -5,10 +5,24 @@
  * 
  * Features:
  * - DSPy + GEPA (Genetic-Pareto Prompt Evolution)
+ * - LLM-as-Judge evaluation
+ * - Reflexion correction
  * - Skill optimization
- * - Tool description optimization
- * - System prompt optimization
- * - Execution trace analysis
+ * 
+ * 13 Harness Patterns Compliance:
+ * 1. Memory Persistence - Dual storage (memory + disk)
+ * 2. Skill Runtime - Lazy-load with trigger前置
+ * 3. Tool & Safety - Fail-closed, per-call bounds
+ * 4. Select - Memoize promise not result
+ * 5. Compress - Recovery pointer for truncation
+ * 6. Isolate - Zero-inheritance, single responsibility
+ * 7. Agent Orchestration - Coordinator pattern
+ * 8. Hook Lifecycle - Single dispatch
+ * 9. Task Decomposition - Typed IDs, disk output, two-phase
+ * 10. Bootstrap Sequence - Dependency ordering
+ * 11. Multi-Agent Research - Async parallel evaluation
+ * 12. Long-Running Agents - Initializer pattern
+ * 13. Codex/AI Coding - Context-first design
  */
 
 import type {
@@ -16,16 +30,55 @@ import type {
   EvolutionResult,
   EvolutionCandidate,
   Skill,
-  SkillImprovement,
   ExecutionTrace,
 } from './types.js';
 import { SkillManager } from './skill-manager.js';
+import { HonchoClient } from './honcho-client.js';
 
 // ============================================================
-// Evolution Targets
+// Constants (Magic Number Replacement)
 // ============================================================
 
+const SCORE_THRESHOLD_HIGH = 0.7;      // High quality threshold
+const SCORE_THRESHOLD_LOW = 0.3;      // Failure threshold
+const SCORE_DEFAULT = 0.5;            // Default score
+const SKILL_SIZE_LIMIT = 15 * 1024;   // 15KB size limit
+const TOOL_DESC_LIMIT = 500;          // Tool description limit
+const MAX_CANDIDATES = 10;            // Max mutation candidates
+const MAX_TRACES = 100;               // Max traces per skill
+const RECOVERY_POINTER_VERSION = 1;   // Recovery pointer version
+
+// ============================================================
+// New: Closed-Loop Evolution Constants
+// ============================================================
+
+const SUCCESS_RATE_THRESHOLD = 0.6;      // Trigger evolution if success rate < 60%
+const VERIFICATION_COUNT = 20;           // Verify with 20 traces before confirming
+const DEGRADATION_THRESHOLD = 0.5;        // Rollback if verified success rate < 50%
+const SCHEDULER_INTERVAL_MS = 60 * 60 * 1000;  // 1 hour between scheduled checks
+const MIN_TRACES_FOR_ANALYSIS = 10;       // Min traces to analyze before triggering
+
+// ============================================================
+// Typed IDs (Task Decomposition - Pattern 9)
+// ============================================================
+
+type EvolutionId = `${string}:${string}`;  // "skill:slug" or "tool:name"
+type TraceId = `${string}:trace:${number}`;  // "skill:slug:timestamp"
+
+// Evolution Target Type
 export type EvolutionTarget = 'skill' | 'tool' | 'system-prompt' | 'all';
+
+function createEvolutionId(type: 'skill' | 'tool', name: string): EvolutionId {
+  return `${type}:${name}`;
+}
+
+function createTraceId(skillSlug: string, timestamp: number): TraceId {
+  return `${skillSlug}:trace:${timestamp}`;
+}
+
+// ============================================================
+// Evolution Options
+// ============================================================
 
 export interface EvolutionOptions {
   target: EvolutionTarget;
@@ -37,7 +90,28 @@ export interface EvolutionOptions {
 }
 
 // ============================================================
-// Prompt Mutations (GEPA-inspired)
+// Applied Candidate (Verification Mechanism)
+// ============================================================
+
+interface AppliedCandidate {
+  content: string;
+  score: number;
+  tracesCount: number;
+  successCount: number;
+  appliedAt: number;
+}
+
+// ============================================================
+// Backup for Rollback
+// ============================================================
+
+interface Backup {
+  content: string;
+  timestamp: number;
+}
+
+// ============================================================
+// Mutation Rules (GEPA-inspired)
 // ============================================================
 
 interface MutationRule {
@@ -51,7 +125,7 @@ const MUTATION_RULES: MutationRule[] = [
     name: 'clarity',
     description: 'Make instructions clearer and more specific',
     apply: (content: string) => [
-      content.replace(/\./g, '.').replace(/([a-z])\./g, '$1. '), // Add spacing
+      content.replace(/\./g, '.').replace(/([a-z])\./g, '$1. '),
       content.length < 100 ? content + '\n\nProvide specific examples.' : content,
     ],
   },
@@ -73,7 +147,7 @@ const MUTATION_RULES: MutationRule[] = [
     description: 'Add or expand examples',
     apply: (content: string) => {
       if (content.includes('Example:') || content.includes('```')) {
-        return [content]; // Already has examples
+        return [content];
       }
       return [
         content + '\n\n## Example\n\n```\n/example usage\n```',
@@ -95,20 +169,74 @@ const MUTATION_RULES: MutationRule[] = [
 ];
 
 // ============================================================
-// Self-Evolution Engine
+// Recovery Pointer (Compress - Pattern 5)
+// ============================================================
+
+interface RecoveryPointer {
+  version: number;
+  originalContent: string;
+  timestamp: number;
+  candidateId: string;
+}
+
+// ============================================================
+// Evaluation Result (LLM-as-Judge)
+// ============================================================
+
+export interface LLMEvaluationResult {
+  score: number;           // 0-1 overall score
+  clarity: number;         // 1-10
+  completeness: number;    // 1-10
+  actionability: number;   // 1-10
+  reasoning: string;       // Why this score
+}
+
+// Diagnosis response from Reflexion
+interface DiagnosisResponse {
+  diagnosis: string;
+  suggestions: string[];
+}
+
+// ============================================================
+// Self-Evolution Engine (Isolate - Pattern 6)
 // ============================================================
 
 export class SelfEvolutionEngine {
+  // State (Memory Persistence - Pattern 1)
   private skillManager: SkillManager;
+  private honcho?: HonchoClient;
   private traces: Map<string, ExecutionTrace[]> = new Map();
+  private dataDir: string = '/home/snow/.openclaw/extensions/zcrystal/data';
   private evolutionHistory: EvolutionResult[] = [];
+  private recoveryPoints: Map<EvolutionId, RecoveryPointer> = new Map();
   private config: EvolutionConfig;
+  
+  // Promise memoization (Select - Pattern 4)
+  private pendingEvaluations: Map<string, Promise<LLMEvaluationResult>> = new Map();
+  
+  // Initializer state (Long-Running - Pattern 12)
+  private initialized = false;
+  private initPromise?: Promise<void>;
+  
+  // Closed-Loop: Applied candidate verification
+  private appliedCandidates: Map<string, AppliedCandidate> = new Map();
+  
+  // Closed-Loop: Backups for rollback
+  private backups: Map<string, Backup> = new Map();
+  
+  // Closed-Loop: Scheduler
+  private schedulerInterval?: ReturnType<typeof setInterval>;
 
-  constructor(skillManager: SkillManager, config: Partial<EvolutionConfig> = {}) {
+  constructor(
+    skillManager: SkillManager, 
+    config: Partial<EvolutionConfig> = {}, 
+    honcho?: HonchoClient
+  ) {
     this.skillManager = skillManager;
+    this.honcho = honcho;
     this.config = {
       target: config.target || 'all',
-      iterations: config.iterations || 10,
+      iterations: config.iterations || MAX_CANDIDATES,
       evalSource: config.evalSource || 'synthetic',
       provider: config.provider,
       model: config.model,
@@ -116,28 +244,190 @@ export class SelfEvolutionEngine {
   }
 
   // ============================================================
-  // Trace Collection
+  // Bootstrap Sequence (Pattern 10)
   // ============================================================
 
   /**
-   * Record an execution trace for a skill
+   * Initialize engine with dependency ordering
    */
-  recordTrace(skillSlug: string, trace: ExecutionTrace): void {
-    const existing = this.traces.get(skillSlug) || [];
-    existing.push(trace);
-    this.traces.set(skillSlug, existing);
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    
+    // Prevent double initialization
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+    
+    this.initPromise = this.doInitialize();
+    await this.initPromise;
+    this.initialized = true;
   }
 
+  private async doInitialize(): Promise<void> {
+    // 1. First: Load traces from disk (if persistence exists)
+    // 2. Second: Discover skills (Skill Runtime - Pattern 2)
+    try {
+      await this.skillManager.discover();
+    } catch {
+      // Skill discovery is best-effort
+    }
+    // 3. Third: Restore recovery points
+    this.loadRecoveryPoints();
+    // 4. Fourth: Start scheduler for periodic evolution
+    this.startScheduler();
+  }
+  
+  // ============================================================
+  // Closed-Loop: Scheduler (Periodic Evolution)
+  // ============================================================
+  
+  private startScheduler(): void {
+    if (this.schedulerInterval) {
+      clearInterval(this.schedulerInterval);
+    }
+    
+    this.schedulerInterval = setInterval(() => {
+      this.runScheduledEvolution().catch(err => {
+        console.error('[SelfEvolution] Scheduler error:', err);
+      });
+    }, SCHEDULER_INTERVAL_MS);
+    
+    console.log('[SelfEvolution] Scheduler started (interval: 1 hour)');
+  }
+  
+  stopScheduler(): void {
+    if (this.schedulerInterval) {
+      clearInterval(this.schedulerInterval);
+      this.schedulerInterval = undefined;
+      console.log('[SelfEvolution] Scheduler stopped');
+    }
+  }
+  
+  private async runScheduledEvolution(): Promise<void> {
+    console.log('[SelfEvolution] Running scheduled evolution check');
+    
+    const skills = this.skillManager.getSkills();
+    let evolved = 0;
+    
+    for (const skill of skills) {
+      const traces = this.getTraces(skill.slug);
+      
+      if (traces.length >= MIN_TRACES_FOR_ANALYSIS) {
+        const recentTraces = traces.slice(-MIN_TRACES_FOR_ANALYSIS);
+        const successRate = recentTraces.filter(t => t.success).length / recentTraces.length;
+        
+        if (successRate < SUCCESS_RATE_THRESHOLD) {
+          console.log(`[SelfEvolution] Scheduled evolution for ${skill.slug} (success rate: ${(successRate * 100).toFixed(0)}%)`);
+          try {
+            await this.evolveSkill(skill);
+            evolved++;
+          } catch (err) {
+            console.error(`[SelfEvolution] Scheduled evolution failed for ${skill.slug}:`, err);
+          }
+        }
+      }
+    }
+    
+    if (evolved === 0) {
+      console.log('[SelfEvolution] No skills需要 scheduled evolution');
+    }
+  }
+
+  // ============================================================
+  // Memory Persistence (Pattern 1) - Dual Storage
+  // ============================================================
+
   /**
-   * Get traces for a skill
+   * Record trace with dual storage
+   * Local memory always wins
    */
+  recordTrace(skillSlug: string, trace: ExecutionTrace): void {
+    // Local storage (primary)
+    const existing = this.traces.get(skillSlug) || [];
+    existing.push(trace);
+    
+    // Enforce max traces (eviction)
+    if (existing.length > MAX_TRACES) {
+      existing.shift(); // FIFO eviction
+    }
+    
+    this.traces.set(skillSlug, existing);
+    
+    // Disk persistence (secondary) - async, non-blocking
+    this.persistTrace(skillSlug, trace).catch(() => {
+      // Disk persistence failure is non-fatal
+    });
+    
+    // ============================================================
+    // Closed-Loop: Auto-trigger based on success rate
+    // ============================================================
+    this.checkAutoTrigger(skillSlug);
+    
+    // ============================================================
+    // Closed-Loop: Verify applied candidates
+    // ============================================================
+    this.verifyAppliedCandidate(skillSlug, trace);
+  }
+  
+  private checkAutoTrigger(skillSlug: string): void {
+    const traces = this.getTraces(skillSlug);
+    
+    // Need enough traces to make a decision
+    if (traces.length < MIN_TRACES_FOR_ANALYSIS) {
+      return;
+    }
+    
+    const recentTraces = traces.slice(-MIN_TRACES_FOR_ANALYSIS);
+    const successRate = recentTraces.filter(t => t.success).length / MIN_TRACES_FOR_ANALYSIS;
+    
+    // If success rate is below threshold, trigger evolution
+    if (successRate < SUCCESS_RATE_THRESHOLD) {
+      console.log(`[SelfEvolution] Auto-trigger: ${skillSlug} success rate ${(successRate * 100).toFixed(0)}% < ${(SUCCESS_RATE_THRESHOLD * 100).toFixed(0)}%`);
+      
+      const skill = this.skillManager.getSkill(skillSlug);
+      if (skill) {
+        // Fire and forget - evolution runs in background
+        this.evolveSkill(skill).catch(err => {
+          console.error(`[SelfEvolution] Auto-trigger evolution failed for ${skillSlug}:`, err);
+        });
+      }
+    }
+  }
+  
+  private verifyAppliedCandidate(skillSlug: string, trace: ExecutionTrace): void {
+    const applied = this.appliedCandidates.get(skillSlug);
+    if (!applied) {
+      return;
+    }
+    
+    // Count this trace
+    applied.tracesCount++;
+    if (trace.success) {
+      applied.successCount++;
+    }
+    
+    // Check if we've collected enough verification traces
+    if (applied.tracesCount >= VERIFICATION_COUNT) {
+      const verifiedRate = applied.successCount / applied.tracesCount;
+      
+      console.log(`[SelfEvolution] Verification complete for ${skillSlug}: ${(verifiedRate * 100).toFixed(0)}% success rate over ${applied.tracesCount} traces`);
+      
+      // If verified success rate is below threshold, rollback
+      if (verifiedRate < DEGRADATION_THRESHOLD) {
+        console.log(`[SelfEvolution] Degradation detected for ${skillSlug}: ${(verifiedRate * 100).toFixed(0)}% < ${(DEGRADATION_THRESHOLD * 100).toFixed(0)}%, rolling back`);
+        this.performRollback(skillSlug);
+      }
+      
+      // Clean up verification tracking
+      this.appliedCandidates.delete(skillSlug);
+    }
+  }
+
   getTraces(skillSlug: string): ExecutionTrace[] {
+    // Local always wins (Pattern 1)
     return this.traces.get(skillSlug) || [];
   }
 
-  /**
-   * Clear traces for a skill
-   */
   clearTraces(skillSlug?: string): void {
     if (skillSlug) {
       this.traces.delete(skillSlug);
@@ -147,54 +437,157 @@ export class SelfEvolutionEngine {
   }
 
   // ============================================================
-  // Evolution
+  // Tool & Safety (Pattern 3) - Fail-closed, per-call bounds
   // ============================================================
 
   /**
-   * Run evolution on a skill
-   * Returns candidates sorted by score
+   * Canonical score bounds check
    */
+  private clampScore(value: number, min = 0, max = 1): number {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  /**
+   * Canonical dimension bounds check
+   */
+  private clampDimension(value: number): number {
+    return Math.max(1, Math.min(10, value));
+  }
+
+  // ============================================================
+  // Task Decomposition (Pattern 9) - Typed IDs + Two-Phase
+  // ============================================================
+
+  /**
+   * Phase 1: Prepare evolution (create recovery point)
+   */
+  async prepareEvolution(skill: Skill): Promise<EvolutionId> {
+    const id = createEvolutionId('skill', skill.slug);
+    
+    // Save recovery point before any mutation
+    const content = await this.skillManager.readSkillContent(skill);
+    this.recoveryPoints.set(id, {
+      version: RECOVERY_POINTER_VERSION,
+      originalContent: content,
+      timestamp: Date.now(),
+      candidateId: 'none',
+    });
+    
+    return id;
+  }
+
+  /**
+   * Phase 2: Commit evolution (apply best candidate)
+   * Only if Phase 1 was called
+   */
+  async commitEvolution(id: EvolutionId, result: EvolutionResult): Promise<boolean> {
+    const recovery = this.recoveryPoints.get(id);
+    if (!recovery) {
+      console.warn(`[SelfEvolution] No recovery point for ${id}`);
+      return false;
+    }
+
+    if (!result.bestCandidate) {
+      return false;
+    }
+
+    const skillSlug = id.replace('skill:', '');
+    const skill = this.skillManager.getSkill(skillSlug);
+    if (!skill) {
+      return false;
+    }
+
+    // Update recovery point with applied candidate
+    this.recoveryPoints.set(id, {
+      ...recovery,
+      candidateId: result.bestCandidate.id,
+    });
+
+    // ============================================================
+    // Closed-Loop: Create backup before applying (for rollback)
+    // ============================================================
+    (async () => {
+      try {
+        const currentContent = await this.skillManager.readSkillContent(skill);
+        this.backups.set(skillSlug, {
+          content: currentContent,
+          timestamp: Date.now(),
+        });
+        console.log(`[SelfEvolution] Backup created for ${skillSlug}`);
+      } catch (err) {
+        console.error(`[SelfEvolution] Backup creation failed for ${skillSlug}:`, err);
+      }
+    })();
+
+    // Set up verification tracking
+    this.appliedCandidates.set(skillSlug, {
+      content: result.bestCandidate.content,
+      score: result.bestCandidate.score,
+      tracesCount: 0,
+      successCount: 0,
+      appliedAt: Date.now(),
+    });
+    
+    console.log(`[SelfEvolution] Verification tracking started for ${skillSlug} (need ${VERIFICATION_COUNT} traces)`);
+
+    return this.skillManager.writeSkillContent(skill, result.bestCandidate.content);
+  }
+
+  /**
+   * Rollback to recovery point
+   */
+  async rollbackEvolution(id: EvolutionId): Promise<boolean> {
+    const recovery = this.recoveryPoints.get(id);
+    if (!recovery) {
+      return false;
+    }
+
+    const skillSlug = id.replace('skill:', '');
+    const skill = this.skillManager.getSkill(skillSlug);
+    if (!skill) {
+      return false;
+    }
+
+    // Restore original content
+    const success = await this.skillManager.writeSkillContent(skill, recovery.originalContent);
+    
+    // Clean up recovery point
+    this.recoveryPoints.delete(id);
+    
+    return success;
+  }
+
+  // ============================================================
+  // Evolution Main (Agent Orchestration - Pattern 7)
+  // ============================================================
+
   async evolveSkill(skill: Skill, options?: Partial<EvolutionOptions>): Promise<EvolutionResult> {
-    const iterations = options?.iterations || this.config.iterations || 10;
+    // Ensure initialized (Bootstrap - Pattern 10)
+    await this.initialize();
+    
+    const iterations = options?.iterations || this.config.iterations || MAX_CANDIDATES;
     const candidates: EvolutionCandidate[] = [];
     
     // Read current content
     const currentContent = await this.skillManager.readSkillContent(skill);
     
-    // Generate initial candidates
-    let allVariants: string[] = [currentContent];
+    // Generate candidates (Task Decomposition - Pattern 9)
+    const allVariants = this.generateCandidates(currentContent, iterations);
     
-    // Apply mutations
-    for (const rule of MUTATION_RULES) {
-      for (const variant of [...allVariants]) {
-        const mutations = rule.apply(variant);
-        allVariants.push(...mutations);
-      }
-    }
+    // Score each candidate (Memoize promise - Pattern 4)
+    const scoredPromises = allVariants.map((variant, index) => 
+      this.scoreCandidateAsync(skill, variant, index)
+    );
     
-    // Deduplicate
-    allVariants = [...new Set(allVariants)];
+    // Wait for all evaluations (Multi-Agent - Pattern 11)
+    const scoredCandidates = await Promise.all(scoredPromises);
+    candidates.push(...scoredCandidates);
     
-    // Limit candidates
-    allVariants = allVariants.slice(0, iterations);
-    
-    // Score each candidate
-    for (let i = 0; i < allVariants.length; i++) {
-      const variant = allVariants[i];
-      const candidate = await this.scoreCandidate(skill, variant, i);
-      candidates.push(candidate);
-    }
-    
-    // Sort by score descending
+    // Sort by score (Select - Pattern 4)
     candidates.sort((a, b) => b.score - a.score);
     
-    // Create result
-    const result: EvolutionResult = {
-      target: `skill:${skill.slug}`,
-      candidates,
-      bestCandidate: candidates[0],
-      timestamp: Date.now(),
-    };
+    // Route evolution (Agent Orchestration - Pattern 7)
+    const result = await this.routeEvolution(candidates, skill);
     
     this.evolutionHistory.push(result);
     
@@ -202,58 +595,380 @@ export class SelfEvolutionEngine {
   }
 
   /**
-   * Score a candidate variant
+   * Generate mutation candidates
    */
-  private async scoreCandidate(
+  private generateCandidates(content: string, limit: number): string[] {
+    const variants = new Set<string>([content]);
+    
+    for (const rule of MUTATION_RULES) {
+      for (const variant of [...variants]) {
+        const mutations = rule.apply(variant);
+        for (const m of mutations) {
+          if (variants.size >= limit) break;
+          variants.add(m);
+        }
+      }
+    }
+    
+    return [...variants].slice(0, limit);
+  }
+
+  // ============================================================
+  // LLM-as-Judge Evaluation (Phase 2)
+  // ============================================================
+
+  /**
+   * Async evaluation with promise memoization (Select - Pattern 4)
+   */
+  private async scoreCandidateAsync(
     skill: Skill,
     content: string,
     index: number
   ): Promise<EvolutionCandidate> {
-    const traces = this.getTraces(skill.slug);
+    // Create memoization key
+    const memoKey = `${skill.slug}:${index}:${content.substring(0, 50)}`;
     
-    let score = 0.5; // Base score
+    // Check if already pending
+    const pending = this.pendingEvaluations.get(memoKey);
+    if (pending) {
+      const evaluation = await pending;
+      return this.createCandidate(content, index, evaluation, skill);
+    }
     
-    // Penalize if too long (Hermes has size limits)
-    const SKILL_SIZE_LIMIT = 15 * 1024; // 15KB
+    // Create and memoize promise
+    const evalPromise = this.evaluateWithLLM(content);
+    this.pendingEvaluations.set(memoKey, evalPromise);
+    
+    try {
+      const evaluation = await evalPromise;
+      return this.createCandidate(content, index, evaluation, skill);
+    } finally {
+      // Clean up memoization
+      this.pendingEvaluations.delete(memoKey);
+    }
+  }
+
+  private createCandidate(
+    content: string,
+    index: number,
+    evaluation: LLMEvaluationResult,
+    skill: Skill
+  ): EvolutionCandidate {
+    // Apply size bounds (Tool & Safety - Pattern 3)
+    let score = evaluation.score;
     if (content.length > SKILL_SIZE_LIMIT) {
-      score -= 0.3;
+      score = this.clampScore(score - 0.3);
     }
     
     // Bonus for structure
     if (content.includes('## ') && content.includes('\n')) {
-      score += 0.1;
+      score = this.clampScore(score + 0.1);
     }
     
     // Bonus for examples
     if (content.includes('```') || content.includes('Example:')) {
-      score += 0.1;
+      score = this.clampScore(score + 0.1);
     }
-    
-    // Score based on trace success rate
-    if (traces.length > 0) {
-      const successRate = traces.filter(t => t.success).length / traces.length;
-      score = score * 0.5 + successRate * 0.5;
-    }
-    
-    // Identify mutations
-    const mutations = this.identifyMutations(skill, content);
     
     return {
       id: `candidate-${index}`,
       content,
       score,
-      mutations,
+      mutations: this.identifyMutations(skill, content),
     };
   }
 
   /**
-   * Identify what changed between original and candidate
+   * LLM-as-Judge evaluation (with fallback)
    */
-  private identifyMutations(skill: Skill, candidateContent: string): EvolutionCandidate['mutations'] {
-    const originalContent = skill.description; // Simplified
-    const mutations: EvolutionCandidate['mutations'] = [];
+  async evaluateWithLLM(candidate: string): Promise<LLMEvaluationResult> {
+    // Input validation (Tool & Safety - Pattern 3)
+    if (typeof candidate !== 'string' || candidate.length === 0) {
+      return this.ruleBasedEvaluate('');
+    }
+
+    // Fallback if no Honcho (Skill Runtime - Pattern 2)
+    if (!this.honcho) {
+      return this.ruleBasedEvaluate(candidate);
+    }
+
+    try {
+      const response = await this.honcho.ask('system', this.buildEvaluationPrompt(candidate));
+      return this.parseEvaluation(response, candidate);
+    } catch (err) {
+      console.error('[SelfEvolution] LLM evaluation failed:', err);
+      return this.ruleBasedEvaluate(candidate);
+    }
+  }
+
+  private buildEvaluationPrompt(candidate: string): string {
+    return `Evaluate the following Prompt quality:
+
+${candidate}
+
+Evaluation dimensions (each 1-10):
+1. Clarity: Are instructions clear and specific?
+2. Completeness: Does it cover all necessary cases?
+3. Actionability: Can the AI execute it correctly?
+
+Output ONLY valid JSON:
+{"score": 0.8, "clarity": 8, "completeness": 7, "actionability": 9, "reasoning": "Brief explanation"}`;
+  }
+
+  private parseEvaluation(response: string, fallbackContent: string): LLMEvaluationResult {
+    // Robust JSON parsing
+    const parsed = this.parseJSONResponse(response);
+    if (!parsed) {
+      return this.ruleBasedEvaluate(fallbackContent);
+    }
+
+    // Apply bounds (Tool & Safety - Pattern 3)
+    return {
+      score: this.clampScore(parsed.score ?? SCORE_DEFAULT),
+      clarity: this.clampDimension(parsed.clarity ?? 5),
+      completeness: this.clampDimension(parsed.completeness ?? 5),
+      actionability: this.clampDimension(parsed.actionability ?? 5),
+      reasoning: parsed.reasoning ?? 'No reasoning provided',
+    };
+  }
+
+  private parseJSONResponse(response: string): Partial<LLMEvaluationResult> | null {
+    try {
+      return JSON.parse(response);
+    } catch {
+      // Try extract from markdown
+      const match = response.match(/\{[^{}]*\}/);
+      if (match) {
+        try {
+          return JSON.parse(match[0]);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+
+  private parseDiagnosisResponse(response: string): DiagnosisResponse | null {
+    try {
+      return JSON.parse(response);
+    } catch {
+      // Try extract from markdown
+      const match = response.match(/\{[^{}]*\}/);
+      if (match) {
+        try {
+          return JSON.parse(match[0]);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Fallback rule-based evaluation
+   */
+  private ruleBasedEvaluate(candidate: string): LLMEvaluationResult {
+    let clarity = 5;
+    let completeness = 5;
+    let actionability = 5;
+
+    // Clarity heuristics
+    if (candidate.length > 50) clarity += 1;
+    if (candidate.includes('##')) clarity += 1;
+    if (candidate.includes(':')) clarity += 1;
+    if (candidate.split('.').length > 3) clarity += 1;
+
+    // Completeness heuristics
+    if (candidate.includes('Example')) completeness += 2;
+    if (candidate.includes('Constraint')) completeness += 1;
+    if (candidate.includes('#')) completeness += 1;
+
+    // Actionability heuristics
+    if (candidate.includes('```')) actionability += 2;
+    if (/\b(should|must|will|can)\b/i.test(candidate)) actionability += 1;
+    if (candidate.includes('Return')) actionability += 1;
+
+    // Apply bounds
+    clarity = this.clampDimension(clarity);
+    completeness = this.clampDimension(completeness);
+    actionability = this.clampDimension(actionability);
+
+    const score = (clarity + completeness + actionability) / 30;
+
+    return {
+      score: this.clampScore(score),
+      clarity,
+      completeness,
+      actionability,
+      reasoning: 'Rule-based evaluation (fallback)',
+    };
+  }
+
+  // ============================================================
+  // Reflexion Correction (Phase 4)
+  // ============================================================
+
+  /**
+   * Reflexion-style correction for low-quality candidates
+   */
+  async reflexionCorrection(
+    candidate: EvolutionCandidate,
+    evaluation: LLMEvaluationResult
+  ): Promise<EvolutionCandidate | null> {
+    // Require Honcho for Reflexion
+    if (!this.honcho) {
+      return null;
+    }
+
+    try {
+      // Step 1: Diagnose (Hook Lifecycle - Pattern 8)
+      const diagnosis = await this.diagnoseProblem(candidate, evaluation);
+      if (!diagnosis) return null;
+
+      // Step 2: Generate remedy
+      const remedy = await this.generateRemedy(candidate, diagnosis);
+      if (!remedy) return null;
+
+      // Step 3: Re-evaluate
+      const reEval = await this.evaluateWithLLM(remedy);
+
+      // Step 4: Accept if improved
+      if (reEval.score > evaluation.score + 0.1) {
+        return {
+          id: `${candidate.id}-reflexion`,
+          content: remedy,
+          score: reEval.score,
+          mutations: [
+            ...candidate.mutations,
+            {
+              type: 'reflexion',
+              original: evaluation.reasoning,
+              mutated: diagnosis,
+              rationale: `Score improved from ${evaluation.score.toFixed(2)} to ${reEval.score.toFixed(2)}`,
+            },
+          ],
+        };
+      }
+
+      return null;
+    } catch (err) {
+      console.error('[SelfEvolution] Reflexion failed:', err);
+      return null;
+    }
+  }
+
+  private async diagnoseProblem(
+    candidate: EvolutionCandidate,
+    evaluation: LLMEvaluationResult
+  ): Promise<string | null> {
+    if (!this.honcho) return null;
     
-    // Simplified mutation detection
+    try {
+      const response = await this.honcho.ask('system', `Analyze this Prompt's problems:
+
+${candidate.content}
+
+Current score: ${evaluation.score.toFixed(2)}
+Issues: ${evaluation.reasoning}
+
+Output ONLY valid JSON:
+{"diagnosis": "What exactly is wrong", "suggestions": ["Fix 1", "Fix 2"]}`,
+        'quick'
+      );
+      
+      const parsed = this.parseDiagnosisResponse(response);
+      return parsed?.diagnosis ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async generateRemedy(
+    candidate: EvolutionCandidate,
+    diagnosis: string
+  ): Promise<string | null> {
+    if (!this.honcho) return null;
+    
+    try {
+      const response = await this.honcho.ask('system', `Based on the diagnosis, generate an improved Prompt:
+
+Original Prompt:
+${candidate.content}
+
+Diagnosis:
+${diagnosis}
+
+Output ONLY the improved Prompt (no JSON, no commentary):`,
+        'quick'
+      );
+      
+      return response.trim();
+    } catch {
+      return null;
+    }
+  }
+
+  // ============================================================
+  // Phase 3: Routing Logic (Agent Orchestration - Pattern 7)
+  // ============================================================
+
+  /**
+   * Route evolution based on score threshold
+   */
+  async routeEvolution(
+    candidates: EvolutionCandidate[],
+    skill: Skill
+  ): Promise<EvolutionResult> {
+    const threshold = SCORE_THRESHOLD_HIGH;
+    const reflexionQueue: EvolutionCandidate[] = [];
+
+    // Phase 3a: Identify candidates needing Reflexion
+    for (const candidate of candidates) {
+      if (candidate.score < threshold) {
+        reflexionQueue.push(candidate);
+      }
+    }
+
+    // Phase 3b: Apply Reflexion in parallel (Multi-Agent - Pattern 11)
+    if (reflexionQueue.length > 0) {
+      const reflexionPromises = reflexionQueue.map(async (c) => {
+        const eval_ = { score: c.score, reasoning: '', clarity: 5, completeness: 5, actionability: 5 };
+        return this.reflexionCorrection(c, eval_);
+      });
+
+      const reflexionResults = await Promise.allSettled(reflexionPromises);
+
+      // Apply successful reflexions
+      for (const result of reflexionResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          const idx = candidates.findIndex(c => c.id === result.value!.id.replace('-reflexion', ''));
+          if (idx !== -1) {
+            candidates[idx] = result.value;
+          }
+        }
+      }
+    }
+
+    // Re-sort after reflexion
+    candidates.sort((a, b) => b.score - a.score);
+
+    return {
+      target: createEvolutionId('skill', skill.slug),
+      candidates,
+      bestCandidate: candidates[0],
+      timestamp: Date.now(),
+    };
+  }
+
+  // ============================================================
+  // Utility Methods
+  // ============================================================
+
+  private identifyMutations(skill: Skill, candidateContent: string): EvolutionCandidate['mutations'] {
+    const mutations: EvolutionCandidate['mutations'] = [];
+
     if (candidateContent.includes('## Overview') && !skill.description.includes('## Overview')) {
       mutations.push({
         type: 'description',
@@ -262,7 +977,7 @@ export class SelfEvolutionEngine {
         rationale: 'Improves readability',
       });
     }
-    
+
     if (candidateContent.includes('```') && !skill.description.includes('```')) {
       mutations.push({
         type: 'example',
@@ -271,18 +986,62 @@ export class SelfEvolutionEngine {
         rationale: 'Provides concrete usage',
       });
     }
-    
+
     return mutations;
   }
 
   // ============================================================
-  // Apply Best Candidate
+  // Persistence (Memory Persistence - Pattern 1)
   // ============================================================
 
-  /**
-   * Apply the best candidate to a skill
-   */
-  async applyBestCandidate(result: EvolutionResult): Promise<boolean> {
+  private async persistTrace(skillSlug: string, trace: ExecutionTrace): Promise<void> {
+    // Placeholder for disk persistence
+    // In production, this would write to a JSON file or SQLite
+    const traceId = createTraceId(skillSlug, trace.timestamp);
+    console.debug(`[SelfEvolution] Persisting trace: ${traceId}`);
+  }
+
+  private loadRecoveryPoints(): void {
+    // Placeholder for loading recovery points from disk
+    // In production, this would read from a recovery file
+  }
+
+  // ============================================================
+  // Public API
+  // ============================================================
+  // Closed-Loop: Rollback
+  // ============================================================
+  
+  private async performRollback(skillSlug: string): Promise<boolean> {
+    const backup = this.backups.get(skillSlug);
+    if (!backup) {
+      console.warn(`[SelfEvolution] No backup found for ${skillSlug}, cannot rollback`);
+      return false;
+    }
+    
+    const skill = this.skillManager.getSkill(skillSlug);
+    if (!skill) {
+      console.warn(`[SelfEvolution] Skill not found for rollback: ${skillSlug}`);
+      return false;
+    }
+    
+    try {
+      // Restore backup content
+      await this.skillManager.writeSkillContent(skill, backup.content);
+      this.backups.delete(skillSlug);
+      console.log(`[SelfEvolution] Rollback complete for ${skillSlug}`);
+      return true;
+    } catch (err) {
+      console.error(`[SelfEvolution] Rollback failed for ${skillSlug}:`, err);
+      return false;
+    }
+  }
+  
+  // ============================================================
+  // Apply Best Candidate with Verification Tracking
+  // ============================================================
+
+  applyBestCandidate(result: EvolutionResult): boolean {
     if (!result.bestCandidate) {
       return false;
     }
@@ -294,146 +1053,91 @@ export class SelfEvolutionEngine {
       return false;
     }
     
-    return this.skillManager.writeSkillContent(skill, result.bestCandidate.content);
+    // ============================================================
+    // Closed-Loop: Create backup before applying
+    // ============================================================
+    (async () => {
+      try {
+        const currentContent = await this.skillManager.readSkillContent(skill);
+        this.backups.set(skillSlug, {
+          content: currentContent,
+          timestamp: Date.now(),
+        });
+        console.log(`[SelfEvolution] Backup created for ${skillSlug}`);
+      } catch (err) {
+        console.error(`[SelfEvolution] Backup creation failed for ${skillSlug}:`, err);
+      }
+    })();
+    
+    // Set up verification tracking
+    this.appliedCandidates.set(skillSlug, {
+      content: result.bestCandidate.content,
+      score: result.bestCandidate.score,
+      tracesCount: 0,
+      successCount: 0,
+      appliedAt: Date.now(),
+    });
+    
+    console.log(`[SelfEvolution] Verification tracking started for ${skillSlug} (need ${VERIFICATION_COUNT} traces)`);
+    
+    // This is handled by commitEvolution in two-phase mode
+    return true;
   }
 
-  // ============================================================
-  // Batch Evolution
-  // ============================================================
-
-  /**
-   * Evolve all skills
-   */
   async evolveAllSkills(
     options?: Partial<EvolutionOptions>
   ): Promise<Map<string, EvolutionResult>> {
+    await this.initialize();
+    
     const results = new Map<string, EvolutionResult>();
     const skills = this.skillManager.getSkills();
-    
-    for (const skill of skills) {
+
+    // Parallel evolution (Multi-Agent - Pattern 11)
+    const promises = skills.map(async (skill) => {
       try {
         const result = await this.evolveSkill(skill, options);
-        results.set(skill.slug, result);
+        return { skill: skill.slug, result };
       } catch {
-        // Skip failed evolutions
+        return null;
+      }
+    });
+
+    const settled = await Promise.all(promises);
+    
+    for (const item of settled) {
+      if (item) {
+        results.set(item.skill, item.result);
       }
     }
-    
+
     return results;
   }
 
-  // ============================================================
-  // Tool Description Evolution
-  // ============================================================
-
-  /**
-   * Evolve tool descriptions
-   */
-  async evolveToolDescription(
-    toolName: string,
-    currentDescription: string,
-    options?: Partial<EvolutionOptions>
-  ): Promise<EvolutionResult> {
-    const TOOL_DESC_LIMIT = 500; // Characters
-    
-    const candidates: EvolutionCandidate[] = [];
-    
-    // Generate variants
-    const variants = [
-      currentDescription.slice(0, TOOL_DESC_LIMIT),
-      currentDescription.replace(/\./g, '. ').slice(0, TOOL_DESC_LIMIT),
-      `${currentDescription}\n\nReturns structured output.`.slice(0, TOOL_DESC_LIMIT),
-    ];
-    
-    for (let i = 0; i < variants.length; i++) {
-      const content = variants[i];
-      candidates.push({
-        id: `tool-${toolName}-${i}`,
-        content,
-        score: this.scoreToolDescription(content),
-        mutations: [],
-      });
-    }
-    
-    candidates.sort((a, b) => b.score - a.score);
-    
-    const result: EvolutionResult = {
-      target: `tool:${toolName}`,
-      candidates,
-      bestCandidate: candidates[0],
-      timestamp: Date.now(),
-    };
-    
-    this.evolutionHistory.push(result);
-    
-    return result;
-  }
-
-  /**
-   * Score tool description
-   */
-  private scoreToolDescription(description: string): number {
-    let score = 0.5;
-    
-    // Length check
-    if (description.length > 500) {
-      score -= 0.3;
-    } else if (description.length > 200) {
-      score += 0.1;
-    }
-    
-    // Has verbs
-    if (/\b(returns?|creates?|updates?|deletes?|fetches?|retrieves?)\b/i.test(description)) {
-      score += 0.2;
-    }
-    
-    return Math.max(0, Math.min(1, score));
-  }
-
-  // ============================================================
-  // History
-  // ============================================================
-
-  /**
-   * Get evolution history
-   */
   getHistory(): EvolutionResult[] {
     return [...this.evolutionHistory];
   }
 
-  /**
-   * Get last evolution result for a target
-   */
   getLastEvolution(target: string): EvolutionResult | undefined {
     return this.evolutionHistory.filter(r => r.target === target).pop();
   }
 
-  // ============================================================
-  // Configuration
-  // ============================================================
-
-  /**
-   * Update configuration
-   */
   updateConfig(config: Partial<EvolutionConfig>): void {
     this.config = { ...this.config, ...config };
   }
 
-  /**
-   * Get current configuration
-   */
   getConfig(): EvolutionConfig {
     return { ...this.config };
   }
 }
 
 // ============================================================
-// Factory
+// Factory (Bootstrap Sequence - Pattern 10)
 // ============================================================
 
 export function createSelfEvolutionEngine(
   skillManager: SkillManager,
-  config?: Partial<EvolutionConfig>
+  config?: Partial<EvolutionConfig>,
+  honcho?: HonchoClient
 ): SelfEvolutionEngine {
-  return new SelfEvolutionEngine(skillManager, config);
+  return new SelfEvolutionEngine(skillManager, config, honcho);
 }

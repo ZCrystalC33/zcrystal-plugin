@@ -106,7 +106,7 @@ export interface EvolutionCandidate {
     mutations: Mutation[];
 }
 export interface Mutation {
-    type: 'description' | 'instruction' | 'example' | 'parameter';
+    type: 'description' | 'instruction' | 'example' | 'parameter' | 'reflexion';
     original: string;
     mutated: string;
     rationale: string;

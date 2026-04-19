@@ -65,10 +65,12 @@ export declare class HonchoClient {
         tokens?: number;
     }): Promise<ContextResponse>;
     healthCheck(): Promise<boolean>;
+    learnFromUser(userId: string, message: string): Promise<boolean>;
     getQueueStatus(): Promise<{
         pending: number;
         completed: number;
     } | null>;
+    getTraces(skillSlug?: string): Promise<unknown[]>;
 }
 export declare function createHonchoClient(config?: HonchoClientConfig): HonchoClient;
 export {};

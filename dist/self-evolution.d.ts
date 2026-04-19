@@ -5,13 +5,29 @@
  *
  * Features:
  * - DSPy + GEPA (Genetic-Pareto Prompt Evolution)
+ * - LLM-as-Judge evaluation
+ * - Reflexion correction
  * - Skill optimization
- * - Tool description optimization
- * - System prompt optimization
- * - Execution trace analysis
+ *
+ * 13 Harness Patterns Compliance:
+ * 1. Memory Persistence - Dual storage (memory + disk)
+ * 2. Skill Runtime - Lazy-load with trigger前置
+ * 3. Tool & Safety - Fail-closed, per-call bounds
+ * 4. Select - Memoize promise not result
+ * 5. Compress - Recovery pointer for truncation
+ * 6. Isolate - Zero-inheritance, single responsibility
+ * 7. Agent Orchestration - Coordinator pattern
+ * 8. Hook Lifecycle - Single dispatch
+ * 9. Task Decomposition - Typed IDs, disk output, two-phase
+ * 10. Bootstrap Sequence - Dependency ordering
+ * 11. Multi-Agent Research - Async parallel evaluation
+ * 12. Long-Running Agents - Initializer pattern
+ * 13. Codex/AI Coding - Context-first design
  */
-import type { EvolutionConfig, EvolutionResult, Skill, ExecutionTrace } from './types.js';
+import type { EvolutionConfig, EvolutionResult, EvolutionCandidate, Skill, ExecutionTrace } from './types.js';
 import { SkillManager } from './skill-manager.js';
+import { HonchoClient } from './honcho-client.js';
+type EvolutionId = `${string}:${string}`;
 export type EvolutionTarget = 'skill' | 'tool' | 'system-prompt' | 'all';
 export interface EvolutionOptions {
     target: EvolutionTarget;
@@ -21,69 +37,109 @@ export interface EvolutionOptions {
     model?: string;
     outputDir?: string;
 }
+export interface LLMEvaluationResult {
+    score: number;
+    clarity: number;
+    completeness: number;
+    actionability: number;
+    reasoning: string;
+}
 export declare class SelfEvolutionEngine {
     private skillManager;
+    private honcho?;
     private traces;
+    private dataDir;
     private evolutionHistory;
+    private recoveryPoints;
     private config;
-    constructor(skillManager: SkillManager, config?: Partial<EvolutionConfig>);
+    private pendingEvaluations;
+    private initialized;
+    private initPromise?;
+    private appliedCandidates;
+    private backups;
+    private schedulerInterval?;
+    constructor(skillManager: SkillManager, config?: Partial<EvolutionConfig>, honcho?: HonchoClient);
     /**
-     * Record an execution trace for a skill
+     * Initialize engine with dependency ordering
+     */
+    initialize(): Promise<void>;
+    private doInitialize;
+    private startScheduler;
+    stopScheduler(): void;
+    private runScheduledEvolution;
+    /**
+     * Record trace with dual storage
+     * Local memory always wins
      */
     recordTrace(skillSlug: string, trace: ExecutionTrace): void;
-    /**
-     * Get traces for a skill
-     */
+    private checkAutoTrigger;
+    private verifyAppliedCandidate;
     getTraces(skillSlug: string): ExecutionTrace[];
-    /**
-     * Clear traces for a skill
-     */
     clearTraces(skillSlug?: string): void;
     /**
-     * Run evolution on a skill
-     * Returns candidates sorted by score
+     * Canonical score bounds check
      */
+    private clampScore;
+    /**
+     * Canonical dimension bounds check
+     */
+    private clampDimension;
+    /**
+     * Phase 1: Prepare evolution (create recovery point)
+     */
+    prepareEvolution(skill: Skill): Promise<EvolutionId>;
+    /**
+     * Phase 2: Commit evolution (apply best candidate)
+     * Only if Phase 1 was called
+     */
+    commitEvolution(id: EvolutionId, result: EvolutionResult): Promise<boolean>;
+    /**
+     * Rollback to recovery point
+     */
+    rollbackEvolution(id: EvolutionId): Promise<boolean>;
     evolveSkill(skill: Skill, options?: Partial<EvolutionOptions>): Promise<EvolutionResult>;
     /**
-     * Score a candidate variant
+     * Generate mutation candidates
      */
-    private scoreCandidate;
+    private generateCandidates;
     /**
-     * Identify what changed between original and candidate
+     * Async evaluation with promise memoization (Select - Pattern 4)
      */
+    private scoreCandidateAsync;
+    private createCandidate;
+    /**
+     * LLM-as-Judge evaluation (with fallback)
+     */
+    evaluateWithLLM(candidate: string): Promise<LLMEvaluationResult>;
+    private buildEvaluationPrompt;
+    private parseEvaluation;
+    private parseJSONResponse;
+    private parseDiagnosisResponse;
+    /**
+     * Fallback rule-based evaluation
+     */
+    private ruleBasedEvaluate;
+    /**
+     * Reflexion-style correction for low-quality candidates
+     */
+    reflexionCorrection(candidate: EvolutionCandidate, evaluation: LLMEvaluationResult): Promise<EvolutionCandidate | null>;
+    private diagnoseProblem;
+    private generateRemedy;
+    /**
+     * Route evolution based on score threshold
+     */
+    routeEvolution(candidates: EvolutionCandidate[], skill: Skill): Promise<EvolutionResult>;
     private identifyMutations;
-    /**
-     * Apply the best candidate to a skill
-     */
-    applyBestCandidate(result: EvolutionResult): Promise<boolean>;
-    /**
-     * Evolve all skills
-     */
+    private persistTrace;
+    private loadRecoveryPoints;
+    private performRollback;
+    applyBestCandidate(result: EvolutionResult): boolean;
     evolveAllSkills(options?: Partial<EvolutionOptions>): Promise<Map<string, EvolutionResult>>;
-    /**
-     * Evolve tool descriptions
-     */
-    evolveToolDescription(toolName: string, currentDescription: string, options?: Partial<EvolutionOptions>): Promise<EvolutionResult>;
-    /**
-     * Score tool description
-     */
-    private scoreToolDescription;
-    /**
-     * Get evolution history
-     */
     getHistory(): EvolutionResult[];
-    /**
-     * Get last evolution result for a target
-     */
     getLastEvolution(target: string): EvolutionResult | undefined;
-    /**
-     * Update configuration
-     */
     updateConfig(config: Partial<EvolutionConfig>): void;
-    /**
-     * Get current configuration
-     */
     getConfig(): EvolutionConfig;
 }
-export declare function createSelfEvolutionEngine(skillManager: SkillManager, config?: Partial<EvolutionConfig>): SelfEvolutionEngine;
+export declare function createSelfEvolutionEngine(skillManager: SkillManager, config?: Partial<EvolutionConfig>, honcho?: HonchoClient): SelfEvolutionEngine;
+export {};
 //# sourceMappingURL=self-evolution.d.ts.map

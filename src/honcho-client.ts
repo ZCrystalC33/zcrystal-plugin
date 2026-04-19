@@ -292,8 +292,9 @@ export class HonchoClient {
   // ============================================================
   async search(peerName: string, query: string, limit = 10): Promise<SearchResult[]> {
     try {
+      // Search all messages in workspace
       const resp = await fetch(
-        `${this.baseUrl}/v3/workspaces/${this.workspace}/peers/${peerName}/search`,
+        `${this.baseUrl}/v3/workspaces/${this.workspace}/search`,
         {
           method: 'POST',
           headers: this.getHeaders(),
@@ -302,8 +303,8 @@ export class HonchoClient {
       );
 
       if (resp.ok) {
-        const data = await resp.json() as SearchResponse;
-        return data.results || [];
+        const data = await resp.json() as SearchResult[];
+        return data;
       }
       return [];
     } catch {
@@ -409,6 +410,30 @@ export class HonchoClient {
   }
 
   // ============================================================
+  // User Learning - Send user message for Honcho to learn from
+  // ============================================================
+  async learnFromUser(userId: string, message: string): Promise<boolean> {
+    try {
+      // Store trace in zcrystal-traces session for user analysis
+      const traceData = JSON.stringify({
+        type: 'trace',
+        skill: userId,
+        action: 'message',
+        success: true,
+        details: message.substring(0, 500),
+        timestamp: Date.now()
+      });
+      
+      return await this.addMessages('zcrystal-traces', [
+        { content: traceData, peerId: 'system' }
+      ]);
+    } catch (err) {
+      console.error('[HonchoClient] learnFromUser error:', err);
+      return false;
+    }
+  }
+
+  // ============================================================
   // Queue Status (for checking if deriver is working)
   // ============================================================
   async getQueueStatus(): Promise<{ pending: number; completed: number } | null> {
@@ -427,6 +452,39 @@ export class HonchoClient {
       return null;
     }
   }
+
+  // ============================================================
+  // Traces - Get traces for user analysis
+  // ============================================================
+  async getTraces(skillSlug?: string): Promise<unknown[]> {
+    try {
+      const messages = await this.getMessages('zcrystal-traces', 100);
+      
+      const traces = messages
+        .filter(m => {
+          try {
+            const data = JSON.parse(m.content || '{}');
+            return data.type === 'trace' && (!skillSlug || data.skill === skillSlug);
+          } catch {
+            return false;
+          }
+        })
+        .map(m => {
+          try {
+            return JSON.parse(m.content || '{}');
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+      
+      return traces;
+    } catch (err) {
+      console.error('[HonchoClient] getTraces error:', err);
+      return [];
+    }
+  }
+
 }
 
 export function createHonchoClient(config: HonchoClientConfig = {}): HonchoClient {

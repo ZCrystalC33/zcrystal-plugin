@@ -1,14 +1,5 @@
 /**
- * ZCrystal Plugin for OpenClaw
- *
- * Main entry point - registers all capabilities with OpenClaw.
- *
- * Features:
- * - Honcho integration (local service at http://localhost:8000)
- * - Skills system (auto-discover SKILL.md)
- * - Self-Evolution (triggered ONLY on /compact command)
- *
- * SDK: https://docs.openclaw.ai/plugins/sdk-overview
+ * ZCrystal Plugin for OpenClaw (Powered by ZCrystal_evo)
  */
 declare const _default: {
     id: string;

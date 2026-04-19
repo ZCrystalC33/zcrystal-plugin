@@ -23,7 +23,8 @@
   "dependencies": {
     "@sinclair/typebox": "^0.34.49",
     "fuse.js": "^7.0.0",
-    "openclaw": "^2026.4.12"
+    "openclaw": "^2026.4.12",
+    "@zcrystal/evo": "file:../ZCrystal_evo"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
