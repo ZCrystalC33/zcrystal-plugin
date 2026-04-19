@@ -104,3 +104,30 @@
 - 基本 Honcho 整合
 - 技能發現
 - 自我進化原型
+
+---
+
+## [0.3.1] - 2026-04-19
+
+### 新增核心功能整合
+
+#### ReviewEngine 評審引擎
+- `zcrystal_review_stats` - 獲取評審統計和失敗模式
+- `zcrystal_review_suggestions` - 獲取技能升級建議
+- `zcrystal_review_record` - 記錄任務執行 *(Agent內部)*
+
+#### ToolHub 工具中心
+- `zcrystal_toolhub_call` - 通過 ToolHub 安全執行工具
+- `zcrystal_toolhub_schema` - 獲取工具 schema
+- `zcrystal_toolhub_logs` - 獲取工具執行日誌
+
+#### SkillGenerator 技能生成
+- `zcrystal_skill_generate` - 從任務模式生成新技能
+- `zcrystal_skill_generator_stats` - 獲取技能生成統計
+
+#### CircuitBreaker 熔斷保護
+- `zcrystal_circuit_status` - 熔斷器狀態和統計
+- `zcrystal_circuit_reset` - 重置熔斷器
+- `zcrystal_circuit_check` - 檢查是否可執行 *(Agent內部)*
+
+### 工具總數：28
