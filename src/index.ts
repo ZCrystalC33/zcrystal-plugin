@@ -17,6 +17,7 @@ import {
   createSkillManager,
   SelfEvolutionEngine,
   EvolutionCoordinator,
+  ReviewEngine,
   ToolHub,
   SkillGenerator,
   SkillVersioning,
@@ -57,6 +58,7 @@ interface PluginState {
   skillIndexer: SkillIndexer;
   skillValidator: SkillValidator;
   skillMerger: SkillMerger;
+  reviewEngine: ReviewEngine;
   circuitBreaker: CircuitBreaker;
   rateLimiter: RateLimiter;
   logger: StructuredLogger;
@@ -171,10 +173,11 @@ export default definePluginEntry({
     const skillIndexer = new SkillIndexer();
     const skillValidator = new SkillValidator();
     const skillMerger = new SkillMerger();
+    const reviewEngine = new ReviewEngine();
     const evolutionCoordinator = new EvolutionCoordinator(evolutionStore, traceStore);
     
     state = { 
-      router, honcho, skillManager, selfEvolution, evolutionCoordinator,
+      router, honcho, skillManager, selfEvolution, evolutionCoordinator, reviewEngine,
       toolHub, skillGenerator, skillVersioning, skillIndexer, skillValidator, skillMerger,
       circuitBreaker, rateLimiter, logger, metrics, workflowEngine,
       skillAdapter, skillSyncManager, replayRunner, hookRegistry
@@ -1096,6 +1099,62 @@ export default definePluginEntry({
           return okResult('Rolled back to: ' + result.previousVersion);
         }
         return errResult(result.error || 'Rollback failed');
+      },
+    });
+
+    // =====================================================================
+    // ReviewEngine Tools
+    // =====================================================================
+
+    api.registerTool({
+      name: 'zcrystal_review_stats',
+      label: 'ZCrystal Review Stats',
+      description: 'Get review engine statistics',
+      parameters: Type.Object({}),
+      async execute(_id, _params) {
+        if (!state) return errResult('Plugin not initialized');
+        const stats = state.reviewEngine.getStats();
+        return okResult(JSON.stringify(stats, null, 2));
+      },
+    });
+
+    api.registerTool({
+      name: 'zcrystal_review_suggestions',
+      label: 'ZCrystal Review Suggestions',
+      description: 'Get skill upgrade suggestions',
+      parameters: Type.Object({}),
+      async execute(_id, _params) {
+        if (!state) return errResult('Plugin not initialized');
+        const suggestions = state.reviewEngine.getUpgradeSuggestions();
+        return okResult(JSON.stringify(suggestions, null, 2), { count: suggestions.length });
+      },
+    });
+
+    api.registerTool({
+      name: 'zcrystal_review_record',
+      label: 'ZCrystal Review Record',
+      description: 'Record a task completion for review',
+      parameters: Type.Object({
+        taskId: Type.String(),
+        taskType: Type.String(),
+        toolChain: Type.Array(Type.String()),
+        success: Type.Boolean(),
+        durationMs: Type.Number(),
+        userId: Type.String(),
+        error: Type.Optional(Type.String()),
+      }),
+      async execute(_id, params) {
+        if (!state) return errResult('Plugin not initialized');
+        state.reviewEngine.onTaskCompleted(
+          params.taskId,
+          params.taskType,
+          params.toolChain,
+          params.success,
+          params.durationMs,
+          params.userId,
+          params.error
+        );
+        return okResult('Recorded: ' + params.taskId);
       },
     });
 
