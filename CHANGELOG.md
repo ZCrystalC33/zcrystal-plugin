@@ -234,3 +234,56 @@ HookRegistry: ✅ 3/3
 ### Repository
 
 https://github.com/ZCrystalC33/zcrystal-plugin
+
+---
+
+## [0.6.0] - 2026-04-19
+
+### 完成所有尚未實現功能
+
+| 功能 | 工具數 | 新增工具 |
+|------|--------|----------|
+| **SkillVersioning** | 6 | version_create, version_get, version_list, version_diff, version_stats, version_rollback |
+| **SkillIndexer** | 4 | indexer_search, indexer_index, indexer_rebuild, indexer_stats |
+| **SkillValidator** | 2 | validator_validate, validator_validate_sync |
+| **SkillMerger** | 1 | merger_suggest |
+| **EvolutionCoordinator** | 4 | coordinator_status, coordinator_register, coordinator_evolve, coordinator_queue |
+
+### GitHub 提交
+
+```
+4f8269f feat: Implement all 5 remaining features
+```
+
+### 工具總數：75
+
+### 測試結果
+
+```
+SkillVersioning: ✅ 3/3
+SkillIndexer: ✅ 3/3
+SkillValidator: ✅ 2/2
+SkillMerger: ✅ 1/1
+EvolutionCoordinator: ✅ (constructor only)
+```
+
+---
+
+## 所有功能已實現完成 🎉
+
+| # | 功能 | 狀態 |
+|---|------|------|
+| 1 | UnifiedApiRouter | ✅ |
+| 2 | WorkflowEngine | ✅ |
+| 3 | OpenClawSkillAdapter | ✅ |
+| 4 | ReplayRunner | ✅ |
+| 5 | HookRegistry | ✅ |
+| 6 | SkillVersioning | ✅ |
+| 7 | SkillIndexer | ✅ |
+| 8 | SkillValidator | ✅ |
+| 9 | SkillMerger | ✅ |
+| 10 | EvolutionCoordinator | ✅ |
+
+### Repository
+
+https://github.com/ZCrystalC33/zcrystal-plugin
