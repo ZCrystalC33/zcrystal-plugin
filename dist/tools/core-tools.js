@@ -24,11 +24,11 @@ export function registerCoreTools(api, state) {
         description: 'Search conversation history using Honcho',
         parameters: Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
         async execute(_id, params) {
-            // Note: Type def says 2 args but impl has 3 - using any to bypass type check
+            // Use type assertion - @zcrystal/evo honcho returns Result but impl returns array
             const result = await state.honcho.search('*', params.query, params.limit || 10);
-            if (result.ok)
-                return okResult(JSON.stringify(result.data, null, 2), { results: result.data });
-            return errResult('Search failed');
+            if (result.ok && result.data && result.data.length > 0)
+                return okResult(JSON.stringify(result.data, null, 2), { count: result.data.length });
+            return errResult('Search failed - no results or Honcho unavailable');
         },
     });
     // zcrystal_ask_user
@@ -39,7 +39,7 @@ export function registerCoreTools(api, state) {
         parameters: Type.Object({ question: Type.String(), depth: Type.Optional(Type.String()) }),
         async execute(_id, params) {
             const result = await state.honcho.ask('user', params.question, params.depth || 'quick');
-            if (result.ok)
+            if (result.ok && result.data)
                 return okResult(result.data, { question: params.question });
             return errResult('Ask failed');
         },

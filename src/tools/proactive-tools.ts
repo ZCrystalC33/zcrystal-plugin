@@ -110,8 +110,8 @@ export function registerProactiveTools(api: OpenClawPluginApi, state: PluginStat
     parameters: Type.Object({}),
     async execute(_id, _params) {
       const result = await state.router.memoryLoad('L2', 'session:current');
-      if (result.success && result.data) return okResult(String(result.data));
-      return okResult('No active session');
+      if (result.success) return okResult(String(result.data ?? 'No active session'));
+      return errResult(result.error ?? 'Session get failed');
     },
   });
 
@@ -220,7 +220,7 @@ export function registerProactiveTools(api: OpenClawPluginApi, state: PluginStat
     async execute(_id, params) {
       const result = await state.router.telegramWebhook(params.payload);
       if (result.success) return okResult(JSON.stringify(result.data, null, 2));
-      return errResult('Telegram webhook failed');
+      return errResult(result.error ?? 'Telegram webhook failed');
     },
   });
 
@@ -232,7 +232,7 @@ export function registerProactiveTools(api: OpenClawPluginApi, state: PluginStat
     async execute(_id, params) {
       const result = await state.router.signalWebhook(params.payload);
       if (result.success) return okResult(JSON.stringify(result.data, null, 2));
-      return errResult('Signal webhook failed');
+      return errResult(result.error ?? 'Signal webhook failed');
     },
   });
 
@@ -244,7 +244,7 @@ export function registerProactiveTools(api: OpenClawPluginApi, state: PluginStat
     async execute(_id, params) {
       const result = await state.router.genericWebhook(params.payload);
       if (result.success) return okResult(JSON.stringify(result.data, null, 2));
-      return errResult('Generic webhook failed');
+      return errResult(result.error ?? 'Generic webhook failed');
     },
   });
 

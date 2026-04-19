@@ -7,6 +7,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import type { PluginState } from '../index.js';
 import { okResult, errResult } from '../index.js';
 import type { Skill } from '@zcrystal/evo';
+import type { SearchResult } from '../types.js';
 
 export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
   // zcrystal_evo_health
@@ -29,10 +30,10 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
     description: 'Search conversation history using Honcho',
     parameters: Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
     async execute(_id, params) {
-      // Note: Type def says 2 args but impl has 3 - using any to bypass type check
-      const result = await (state.honcho as any).search('*', params.query, params.limit || 10);
-      if (result.ok) return okResult(JSON.stringify(result.data, null, 2), { results: result.data });
-      return errResult('Search failed');
+      // Use type assertion - @zcrystal/evo honcho returns Result but impl returns array
+      const result = await (state.honcho.search as any)('*', params.query, params.limit || 10) as { ok?: boolean; data?: SearchResult[]; length?: number };
+      if (result.ok && result.data && result.data.length > 0) return okResult(JSON.stringify(result.data, null, 2), { count: result.data.length });
+      return errResult('Search failed - no results or Honcho unavailable');
     },
   });
 
@@ -44,7 +45,7 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
     parameters: Type.Object({ question: Type.String(), depth: Type.Optional(Type.String()) }),
     async execute(_id, params) {
       const result = await state.honcho.ask('user', params.question, params.depth || 'quick');
-      if (result.ok) return okResult(result.data, { question: params.question });
+      if (result.ok && result.data) return okResult(result.data, { question: params.question });
       return errResult('Ask failed');
     },
   });

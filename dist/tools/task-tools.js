@@ -54,7 +54,7 @@ export function registerTaskTools(api, state) {
             const result = await state.router.getTaskStats();
             if (result.success)
                 return okResult(JSON.stringify(result.data, null, 2));
-            return errResult('Failed to get task stats');
+            return errResult(result.error ?? 'Failed to get task stats');
         },
     });
     // zcrystal_memory_store
@@ -81,8 +81,8 @@ export function registerTaskTools(api, state) {
         async execute(_id, params) {
             const result = await state.router.memoryLoad(params.layer, params.key);
             if (result.success)
-                return okResult('Memory loaded', { value: result.data });
-            return errResult(result.error ?? 'Memory not found');
+                return okResult(String(result.data ?? 'Memory not found'));
+            return errResult(result.error ?? 'Memory load failed');
         },
     });
     // zcrystal_memory_search
@@ -147,7 +147,7 @@ export function registerTaskTools(api, state) {
             const result = await state.router.listModels();
             if (result.success)
                 return okResult(JSON.stringify(result.data, null, 2), { count: result.data?.models?.length || 0 });
-            return errResult('Failed to list models');
+            return errResult(result.error ?? 'Failed to list models');
         },
     });
     // zcrystal_evo_ready
