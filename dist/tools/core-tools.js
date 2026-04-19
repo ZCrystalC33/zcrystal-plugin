@@ -24,11 +24,12 @@ export function registerCoreTools(api, state) {
         description: 'Search conversation history using Honcho',
         parameters: Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
         async execute(_id, params) {
-            // Use type assertion - @zcrystal/evo honcho returns Result but impl returns array
-            const result = await state.honcho.search('*', params.query, params.limit || 10);
-            if (result.ok && result.data && result.data.length > 0)
+            // @zcrystal/evo HonchoClient.search(query, limit) returns Promise<Result<unknown[]>>
+            const result = await state.honcho.search(params.query, params.limit || 10);
+            if (result.ok && Array.isArray(result.data) && result.data.length > 0) {
                 return okResult(JSON.stringify(result.data, null, 2), { count: result.data.length });
-            return errResult('Search failed - no results or Honcho unavailable');
+            }
+            return errResult(result.ok ? 'Search returned no results' : String(result.error ?? 'Search failed'));
         },
     });
     // zcrystal_ask_user
