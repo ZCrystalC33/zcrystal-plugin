@@ -115,7 +115,7 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
       success: Type.Boolean(), duration: Type.Number(),
     }),
     async execute(_id, params) {
-      console.log('[ZCrystal] Trace recorded:', params);
+      state.logger.info('[ZCrystal] Trace recorded', { skillSlug: params.skillSlug, success: params.success });
       return okResult('Trace recorded', { skillSlug: params.skillSlug });
     },
   }, { optional: true });

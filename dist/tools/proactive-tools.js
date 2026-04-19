@@ -270,8 +270,7 @@ export function registerProactiveTools(api, state) {
         description: 'Run layer exchange',
         parameters: Type.Object({}),
         async execute(_id, _params) {
-            const stats = await state.router.memoryStats();
-            return okResult('Layer exchange triggered via MemoryLayers', stats.data || {});
+            return okResult('Layer exchange is automatic via MemoryLayers - use memory_stats to monitor', {});
         },
     });
     api.registerTool({
@@ -281,7 +280,7 @@ export function registerProactiveTools(api, state) {
         parameters: Type.Object({ context: Type.String() }),
         async execute(_id, params) {
             const suggestions = state.reviewEngine.getUpgradeSuggestions();
-            return okResult(JSON.stringify({ suggestions: suggestions.slice(0, 3).map(s => s.reason), confidence: 0.6 }, null, 2));
+            return okResult(JSON.stringify({ suggestions: suggestions.slice(0, 3).map((s) => s.reason), confidence: 0.6 }, null, 2));
         },
     });
     api.registerTool({

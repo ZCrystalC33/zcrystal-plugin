@@ -8,6 +8,18 @@ import type { PluginState } from '../index.js';
 import { okResult, errResult } from '../index.js';
 import type { TriggerType } from '@zcrystal/evo';
 
+/** Minimal skill representation used for indexing */
+export interface IndexedSkill {
+  skillId: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Replay case shape returned by ReplayRunner */
+export interface ReplayCase {
+  id: string;
+}
+
 export function registerWorkflowTools(api: OpenClawPluginApi, state: PluginState) {
   // Workflow Tools
   api.registerTool({
@@ -179,7 +191,7 @@ export function registerWorkflowTools(api: OpenClawPluginApi, state: PluginState
     description: 'List replay cases by task type',
     parameters: Type.Object({ taskType: Type.Optional(Type.String()) }),
     async execute(_id, params) {
-      let cases: any[] = [];
+      let cases: ReplayCase[] = [];
       if (params.taskType) cases = state.replayRunner.getCasesForTaskType(params.taskType);
       return okResult(JSON.stringify(cases, null, 2), { count: cases?.length || 0 });
     },

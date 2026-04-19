@@ -93,8 +93,10 @@ export function registerSkillTools(api, state) {
         description: 'Index a skill for search',
         parameters: Type.Object({ skillId: Type.String() }),
         async execute(_id, params) {
-            const skill = { skillId: params.skillId, content: '', metadata: {} };
-            await state.skillIndexer.indexSkill(skill);
+            const skillResult = await state.skillManager.getSkill(params.skillId);
+            if (!skillResult.ok || !skillResult.data)
+                return errResult('Skill not found: ' + params.skillId);
+            await state.skillIndexer.indexSkill(skillResult.data);
             return okResult('Indexed: ' + params.skillId);
         },
     });
@@ -104,7 +106,7 @@ export function registerSkillTools(api, state) {
         description: 'Rebuild the entire skill index',
         parameters: Type.Object({}),
         async execute(_id, _params) {
-            return okResult('Index rebuilt');
+            return errResult('Indexer rebuild not yet implemented - use indexer_index to add skills manually');
         },
     });
     api.registerTool({
@@ -159,7 +161,7 @@ export function registerSkillTools(api, state) {
             const result = await state.router.getSkillVersions(params.skillId);
             if (result.success)
                 return okResult(JSON.stringify(result.data, null, 2), { count: result.data?.versions?.length || 0 });
-            return errResult('Failed to get skill versions');
+            return errResult(result.error ?? 'Failed to get skill versions');
         },
     });
     api.registerTool({
@@ -171,7 +173,7 @@ export function registerSkillTools(api, state) {
             const result = await state.router.rollbackSkill(params.skillId, params.version);
             if (result.success)
                 return okResult('Rolled back to version: ' + params.version);
-            return errResult('Rollback failed');
+            return errResult(result.error ?? 'Rollback failed');
         },
     });
 }

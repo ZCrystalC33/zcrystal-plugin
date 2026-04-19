@@ -48,8 +48,8 @@ export function registerSystemTools(api, state) {
             name: Type.Union([Type.Literal('message:received'), Type.Literal('after_tool_call'), Type.Literal('before_prompt_build')]),
             handler: Type.String(),
         }),
-        async execute(_id, params) {
-            return okResult('Hook registered: ' + params.name);
+        async execute(_id, _params) {
+            return errResult('Hook registration requires handler function - use hook_dispatch for manual triggers');
         },
     });
     api.registerTool({
@@ -82,8 +82,7 @@ export function registerSystemTools(api, state) {
         description: 'Get evolution coordinator status',
         parameters: Type.Object({}),
         async execute(_id, _params) {
-            await state.evolutionCoordinator.evolveOne('test', 'content');
-            return okResult(JSON.stringify({ status: 'running' }, null, 2));
+            return okResult(JSON.stringify({ status: 'running', message: 'Use coordinator_evolve to trigger evolution' }, null, 2));
         },
     });
     api.registerTool({
