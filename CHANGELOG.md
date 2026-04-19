@@ -287,3 +287,87 @@ EvolutionCoordinator: ✅ (constructor only)
 ### Repository
 
 https://github.com/ZCrystalC33/zcrystal-plugin
+
+---
+
+## [0.7.0] - 2026-04-19
+
+### 主要發布：Proactive AI 完整實現
+
+#### 新增 Proactive Session Tracker (7)
+- `zcrystal_session_set` - 設定當前任務
+- `zcrystal_session_get` - 獲取 session 狀態
+- `zcrystal_session_clear` - 清除 session
+- `zcrystal_proactive_check` - 檢查待辦事項
+- `zcrystal_proactive_suggest` - 主動建議
+- `zcrystal_proactive_log` - 記錄行動
+- `zcrystal_proactive_recent` - 獲取最近行動
+
+#### 新增 Self-Improving Engine (11)
+- `zcrystal_correction_add/list` - 修正日誌
+- `zcrystal_heartbeat_run/status` - 心跳引擎
+- `zcrystal_layers_exchange` - 層交換
+- `zcrystal_predict` - 上下文預測
+- `zcrystal_pattern_add/list` - 模式學習
+- `zcrystal_log_action/recent` - 行動日誌
+- `zcrystal_selfimproving_status` - 系統狀態
+
+#### 新增自動觸發機制
+- Heartbeat: 每 5 分鐘自動執行
+- Proactive Check: 每 10 分鐘自動執行
+- EvolutionScheduler: 每 60 分鐘自動進化
+
+### 自動觸發的 Proactive 功能
+
+| 間隔 | 功能 |
+|------|------|
+| 每 5 分鐘 | Heartbeat (健康檢查 + 進化狀態) |
+| 每 10 分鐘 | Proactive Check (Session + 建議) |
+| 每 60 分鐘 | EvolutionScheduler (自動進化) |
+
+### GitHub 提交
+
+```
+aefc252 docs: Update README for v0.6.0 - 100 tools, Proactive AI
+5e66626 feat: Add auto-trigger mechanisms for heartbeat and proactive check
+2459b9b feat: Add Proactive Session Tracker
+56486a5 refactor: Integrate Self-Improving into existing ZCrystal system
+```
+
+### 工具總數：100
+
+### 完整功能覆蓋
+
+| 類別 | 功能 | 工具數 |
+|------|------|--------|
+| 核心系統 | UnifiedApiRouter, TaskLifecycle, MemoryLayers | 15 |
+| 技能系統 | Manager, Versioning, Indexer, Validator, Merger, Generator | 18 |
+| 進化系統 | SelfEvolutionEngine, EvolutionScheduler, Coordinator | 11 |
+| 安全保護 | CircuitBreaker, RateLimiter | 5 |
+| Proactive | Session Tracker, Self-Improving, Heartbeat | 12 |
+| 適配器 | OpenClawAdapter, ReplayRunner, Hooks | 13 |
+| 工作流 | WorkflowEngine | 6 |
+| 工具生態 | ToolHub, FTS5, Webhooks | 8 |
+| 其他 | Logger, Metrics, Commands | 12 |
+
+### Proactive 等級：Level 4（預測性主動）
+
+---
+
+## 版本歷史
+
+| 版本 | 日期 | 工具數 | 主要功能 |
+|------|------|--------|----------|
+| 0.3.0 | 2026-04-19 | 18 | 統一 API + 核心引擎 |
+| 0.3.1 | 2026-04-19 | 28 | ReviewEngine + ToolHub |
+| 0.3.2 | 2026-04-19 | 28 | RateLimiter + Logger |
+| 0.4.0 | 2026-04-19 | 39 | 完整 Gateway API |
+| 0.5.0 | 2026-04-19 | 58 | WorkflowEngine + Adapter |
+| 0.6.0 | 2026-04-19 | 75 | SkillVersioning + Indexer |
+| 0.7.0 | 2026-04-19 | 100 | Proactive AI + Self-Improving |
+
+---
+
+### Repository
+
+https://github.com/ZCrystalC33/zcrystal-plugin
