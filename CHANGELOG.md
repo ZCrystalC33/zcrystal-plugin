@@ -180,3 +180,57 @@
 #### 測試結果
 - 39/39 工具功能測試通過
 - 唯一問題：skillGenerator.generate 內部 bug（已記錄）
+
+---
+
+## [0.5.0] - 2026-04-19
+
+### 完成所有未實現功能
+
+| 功能 | 工具數 | 新增工具 |
+|------|--------|----------|
+| **WorkflowEngine** | 6 | create, get, stats, pause, resume, cancel |
+| **OpenClawSkillAdapter** | 5 | scan_openclaw, scan_zcrystal, import, export, sync |
+| **ReplayRunner** | 5 | save, get, list, stats, rollback |
+| **HookRegistry** | 3 | register, dispatch, list |
+
+### GitHub 提交
+
+```
+cb00710 feat: Complete all unimplemented features
+```
+
+### 工具總數：58
+
+| 類別 | 數量 |
+|------|------|
+| 核心工具 | 4 |
+| 任務系統 | 3 |
+| 記憶系統 | 5 |
+| 技能系統 | 6 |
+| 進化系統 | 3 |
+| 路由器 | 2 |
+| 評審系統 | 3 |
+| ToolHub | 3 |
+| Webhook | 3 |
+| FTS5 | 2 |
+| 熔斷保護 | 3 |
+| 速率限制 | 2 |
+| 日誌/指標 | 3 |
+| **WorkflowEngine** | 6 |
+| **OpenClawSkillAdapter** | 5 |
+| **ReplayRunner** | 5 |
+| **HookRegistry** | 3 |
+
+### 測試結果
+
+```
+WorkflowEngine: ✅ 4/5
+OpenClawSkillAdapter: ✅ 2/2
+ReplayRunner: ✅ 3/3
+HookRegistry: ✅ 3/3
+```
+
+### Repository
+
+https://github.com/ZCrystalC33/zcrystal-plugin
