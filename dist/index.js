@@ -189,7 +189,7 @@ export default definePluginEntry({
         api.registerTool({
             name: 'zcrystal_record_trace',
             label: 'ZCrystal Record Trace',
-            description: 'Record execution trace for self-evolution',
+            description: 'Record execution trace (Agent-internal)',
             parameters: Type.Object({
                 skillSlug: Type.String(), input: Type.String(), output: Type.String(),
                 success: Type.Boolean(), duration: Type.Number(),
@@ -207,7 +207,7 @@ export default definePluginEntry({
         api.registerTool({
             name: 'zcrystal_task_create',
             label: 'ZCrystal Task Create',
-            description: 'Create a new task using TaskLifecycle',
+            description: 'Create a new task (Agent-internal)',
             parameters: Type.Object({
                 task_type: Type.String(),
                 trigger: Type.Union([Type.Literal('telegram'), Type.Literal('signal'), Type.Literal('webhook'), Type.Literal('cron'), Type.Literal('manual')]),
@@ -235,7 +235,7 @@ export default definePluginEntry({
         api.registerTool({
             name: 'zcrystal_task_get',
             label: 'ZCrystal Task Get',
-            description: 'Get task by ID',
+            description: 'Get task by ID (Agent-internal)',
             parameters: Type.Object({ taskId: Type.String() }),
             async execute(_id, params) {
                 if (!state)
@@ -249,7 +249,7 @@ export default definePluginEntry({
         api.registerTool({
             name: 'zcrystal_memory_store',
             label: 'ZCrystal Memory Store',
-            description: 'Store data in memory layers (L1-L5)',
+            description: 'Store data in memory L1-L5 (Agent-internal)',
             parameters: Type.Object({
                 layer: Type.String(), key: Type.String(), value: Type.Any(), ttl: Type.Optional(Type.Number()),
             }),
@@ -265,7 +265,7 @@ export default definePluginEntry({
         api.registerTool({
             name: 'zcrystal_memory_load',
             label: 'ZCrystal Memory Load',
-            description: 'Load from memory layers',
+            description: 'Load from memory layers (Agent-internal)',
             parameters: Type.Object({ layer: Type.String(), key: Type.String() }),
             async execute(_id, params) {
                 if (!state)
@@ -279,7 +279,7 @@ export default definePluginEntry({
         api.registerTool({
             name: 'zcrystal_model_pick',
             label: 'ZCrystal Model Pick',
-            description: 'Pick best model for task type',
+            description: 'Pick best model (Agent-internal)',
             parameters: Type.Object({ taskType: Type.String(), constraints: Type.Optional(Type.Record(Type.String(), Type.Any())) }),
             async execute(_id, params) {
                 if (!state)
