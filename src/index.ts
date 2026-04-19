@@ -4,6 +4,7 @@
  * Unified plugin combining:
  * - Original zcrystal features (Honcho integration, Skills, Self-Evolution)
  * - ZCrystal_evo advanced features (TaskLifecycle, MemoryLayers, ModelRouter)
+ * - FTS5 search integration
  */
 
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
@@ -43,22 +44,54 @@ function errResult(text: string) {
 }
 
 // ============================================================================
-// Schemas
+// FTS5 MCP HTTP Client
 // ============================================================================
 
-const SearchParams = Type.Object({
-  query: Type.String(),
-  limit: Type.Optional(Type.Number()),
-});
+const FTS5_MCP_URL = 'http://localhost:18795/mcp';
 
-const AskUserParams = Type.Object({
-  question: Type.String(),
-  depth: Type.Optional(Type.Union([Type.Literal('quick'), Type.Literal('thorough')])),
-});
+async function fts5Search(query: string, limit = 20) {
+  try {
+    const response = await fetch(FTS5_MCP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: { name: 'fts5_search', arguments: { query, limit } },
+        id: 2
+      })
+    });
+    const data = await response.json() as { result?: { content?: Array<{ text: string }> } };
+    if (data.result?.content?.[0]?.text) {
+      return { success: true, data: data.result.content[0].text };
+    }
+    return { success: false, error: 'FTS5 search failed' };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
 
-const TaskGetParams = Type.Object({
-  taskId: Type.String(),
-});
+async function fts5Stats() {
+  try {
+    const response = await fetch(FTS5_MCP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: { name: 'fts5_stats', arguments: {} },
+        id: 3
+      })
+    });
+    const data = await response.json() as { result?: { content?: Array<{ text: string }> } };
+    if (data.result?.content?.[0]?.text) {
+      return { success: true, data: data.result.content[0].text };
+    }
+    return { success: false, error: 'FTS5 stats failed' };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
 
 // ============================================================================
 // Plugin Entry
@@ -67,14 +100,14 @@ const TaskGetParams = Type.Object({
 export default definePluginEntry({
   id: 'zcrystal',
   name: 'ZCrystal',
-  description: 'Honcho + Skills + Self-Evolution + TaskLifecycle + MemoryLayers (Powered by ZCrystal_evo)',
+  description: 'Honcho + Skills + Self-Evolution + TaskLifecycle + MemoryLayers + FTS5 (Powered by ZCrystal_evo)',
   
   register(api: OpenClawPluginApi) {
     console.log('[ZCrystal] Initializing with ZCrystal_evo...');
     
     const router = new UnifiedApiRouter();
     const honcho = createHonchoClient({ baseUrl: 'http://localhost:8000', workspace: 'openclaw' });
-    const skillManager = createSkillManager('~/.openclaw/skills');
+    const skillManager = createSkillManager('/home/snow/.openclaw/skills');
     
     const diskStore = new DiskStore('/tmp/zcrystal-stores');
     const evolutionStore = new EvolutionStore(diskStore);
@@ -84,14 +117,27 @@ export default definePluginEntry({
     state = { router, honcho, skillManager, selfEvolution };
     
     // =====================================================================
-    // Core Tools (Original ZCrystal)
+    // Core Tools (Original ZCrystal + ZCrystal_evo)
     // =====================================================================
     
+    api.registerTool({
+      name: 'zcrystal_evo_health',
+      label: 'ZCrystal Evo Health',
+      description: 'Health check for ZCrystal_evo core',
+      parameters: Type.Object({}),
+      async execute(_id, _params) {
+        if (!state) return errResult('Plugin not initialized');
+        const result = await state.router.healthCheck();
+        if (result.success) return okResult('ZCrystal_evo is healthy', result.data);
+        return errResult(result.error ?? 'Health check failed');
+      },
+    });
+
     api.registerTool({
       name: 'zcrystal_search',
       label: 'ZCrystal Search',
       description: 'Search conversation history using Honcho',
-      parameters: SearchParams,
+      parameters: Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
       async execute(_id, params) {
         if (!state) return errResult('Plugin not initialized');
         const result = await state.honcho.search(params.query, params.limit || 10);
@@ -104,7 +150,7 @@ export default definePluginEntry({
       name: 'zcrystal_ask_user',
       label: 'ZCrystal Ask User',
       description: 'Ask Honcho about user preferences',
-      parameters: AskUserParams,
+      parameters: Type.Object({ question: Type.String(), depth: Type.Optional(Type.String()) }),
       async execute(_id, params) {
         if (!state) return errResult('Plugin not initialized');
         const result = await state.honcho.ask('user', params.question, params.depth || 'quick');
@@ -189,19 +235,6 @@ export default definePluginEntry({
     // =====================================================================
     
     api.registerTool({
-      name: 'zcrystal_evo_health',
-      label: 'ZCrystal Evo Health',
-      description: 'Health check for ZCrystal_evo core',
-      parameters: Type.Object({}),
-      async execute(_id, _params) {
-        if (!state) return errResult('Plugin not initialized');
-        const result = await state.router.healthCheck();
-        if (result.success) return okResult('ZCrystal_evo is healthy', result.data);
-        return errResult(result.error ?? 'Health check failed');
-      },
-    });
-
-    api.registerTool({
       name: 'zcrystal_task_create',
       label: 'ZCrystal Task Create',
       description: 'Create a new task using TaskLifecycle',
@@ -232,7 +265,7 @@ export default definePluginEntry({
       name: 'zcrystal_task_get',
       label: 'ZCrystal Task Get',
       description: 'Get task by ID',
-      parameters: TaskGetParams,
+      parameters: Type.Object({ taskId: Type.String() }),
       async execute(_id, params) {
         if (!state) return errResult('Plugin not initialized');
         const result = await state.router.getTask(params.taskId);
@@ -283,6 +316,34 @@ export default definePluginEntry({
     });
 
     // =====================================================================
+    // FTS5 Tools
+    // =====================================================================
+    
+    api.registerTool({
+      name: 'zcrystal_fts5_search',
+      label: 'ZCrystal FTS5 Search',
+      description: 'Search conversation history using FTS5 full-text search',
+      parameters: Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
+      async execute(_id, params) {
+        const result = await fts5Search(params.query, params.limit || 20);
+        if (result.success) return okResult(result.data as string);
+        return errResult(result.error ?? 'FTS5 search failed');
+      },
+    });
+
+    api.registerTool({
+      name: 'zcrystal_fts5_stats',
+      label: 'ZCrystal FTS5 Stats',
+      description: 'Get FTS5 database statistics',
+      parameters: Type.Object({}),
+      async execute(_id, _params) {
+        const result = await fts5Stats();
+        if (result.success) return okResult(result.data as string);
+        return errResult(result.error ?? 'FTS5 stats failed');
+      },
+    });
+
+    // =====================================================================
     // Commands
     // =====================================================================
     
@@ -316,10 +377,12 @@ export default definePluginEntry({
         const health = await state.router.healthCheck();
         const skills = await state.router.listSkills();
         const evo = await state.router.getEvolutionStatus();
+        const fts5 = await fts5Stats();
         return { text: `ZCrystal Profile:
 - Health: ${health.success ? '✅ Healthy' : '❌ Unhealthy'}
 - Skills: ${skills.success ? skills.data?.skills?.length || 0 : 'N/A'}
-- Evolution: ${evo.success ? (evo.data?.running ? '🔄 Running' : '⏸️ Idle') : 'N/A'}` };
+- Evolution: ${evo.success ? (evo.data?.running ? '🔄 Running' : '⏸️ Idle') : 'N/A'}
+- FTS5: ${fts5.success ? '✅ Available' : '❌ Unavailable'}` };
       },
     });
 
@@ -332,8 +395,6 @@ export default definePluginEntry({
       const msg = (event as { context?: { content?: string } })?.context?.content || '';
       if (msg) {
         await state.router.memoryStoreData('L3', 'last_message', msg);
-        // Also send to Honcho for learning
-        // learnFromUser not available in ZCrystal_evo HonchoClient
       }
     }, { name: 'zcrystal:msg_received' });
 
@@ -343,6 +404,6 @@ export default definePluginEntry({
       if (content) await state.router.memoryStoreData('L2', 'last_ai_response', content);
     }, { name: 'zcrystal:msg_sent' });
 
-    console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 16');
+    console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 18');
   },
 });

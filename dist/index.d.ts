@@ -4,6 +4,7 @@
  * Unified plugin combining:
  * - Original zcrystal features (Honcho integration, Skills, Self-Evolution)
  * - ZCrystal_evo advanced features (TaskLifecycle, MemoryLayers, ModelRouter)
+ * - FTS5 search integration
  */
 declare const _default: {
     id: string;
