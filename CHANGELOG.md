@@ -131,3 +131,22 @@
 - `zcrystal_circuit_check` - 檢查是否可執行 *(Agent內部)*
 
 ### 工具總數：28
+
+---
+
+## [0.3.2] - 2026-04-19
+
+### 新增監控和速率限制功能
+
+#### RateLimiter 速率限制
+- `zcrystal_rate_status` - 獲取速率限制器狀態
+- `zcrystal_rate_check` - 檢查操作是否允許 *(Agent內部)*
+
+#### StructuredLogger 結構化日誌
+- `zcrystal_log` - 寫入結構化日誌 *(Agent內部)*
+
+#### Metrics 指標收集
+- `zcrystal_metrics_get` - 獲取指標統計
+- `zcrystal_metrics_record` - 記錄指標事件 *(Agent內部)*
+
+### 工具總數：28
