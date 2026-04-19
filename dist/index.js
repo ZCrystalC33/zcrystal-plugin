@@ -8,7 +8,7 @@
  */
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { Type } from '@sinclair/typebox';
-import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
+import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, ToolHub, SkillGenerator, CircuitBreaker, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
 let state = null;
 function okResult(text, details) {
     return { content: [{ type: 'text', text }], details: details ?? {} };
@@ -80,7 +80,14 @@ export default definePluginEntry({
         const evolutionStore = new EvolutionStore(diskStore);
         const traceStore = new TraceStore(diskStore);
         const selfEvolution = new SelfEvolutionEngine(evolutionStore, traceStore);
-        state = { router, honcho, skillManager, selfEvolution };
+        const toolHub = new ToolHub();
+        const skillGenerator = new SkillGenerator();
+        const circuitBreaker = new CircuitBreaker({
+            failureThreshold: 5,
+            successThreshold: 2,
+            timeout: 60000,
+        });
+        state = { router, honcho, skillManager, selfEvolution, toolHub, skillGenerator, circuitBreaker };
         // =====================================================================
         // Core Tools (Original ZCrystal + ZCrystal_evo)
         // =====================================================================
@@ -317,6 +324,135 @@ export default definePluginEntry({
                 return errResult(result.error ?? 'FTS5 stats failed');
             },
         });
+        // =====================================================================
+        // Tool Hub Integration
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_toolhub_call',
+            label: 'ZCrystal ToolHub Call',
+            description: 'Execute a tool via ToolHub with security checks',
+            parameters: Type.Object({
+                toolName: Type.String(),
+                params: Type.Record(Type.String(), Type.Any()),
+                taskId: Type.Optional(Type.String()),
+            }),
+            async execute(_id, args) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const result = await state.toolHub.doToolCall(args.toolName, args.params, args.taskId);
+                if (result.success) {
+                    return okResult(JSON.stringify(result.data, null, 2), { durationMs: result.durationMs });
+                }
+                return errResult(result.error || 'Tool call failed');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_toolhub_schema',
+            label: 'ZCrystal ToolHub Schema',
+            description: 'Get tool schema by name from ToolHub',
+            parameters: Type.Object({ name: Type.String() }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const schema = state.toolHub.getToolSchema(params.name);
+                if (schema) {
+                    return okResult(JSON.stringify(schema, null, 2));
+                }
+                return errResult('Tool schema not found: ' + params.name);
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_toolhub_logs',
+            label: 'ZCrystal ToolHub Logs',
+            description: 'Get recent tool execution logs',
+            parameters: Type.Object({ limit: Type.Optional(Type.Number()) }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const logs = state.toolHub.getLogs(undefined, params.limit || 100);
+                return okResult(JSON.stringify(logs, null, 2), { count: logs.length });
+            },
+        });
+        // =====================================================================
+        // Skill Generator Integration
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_skill_generate',
+            label: 'ZCrystal Skill Generate',
+            description: 'Generate a new skill from task execution patterns',
+            parameters: Type.Object({
+                taskType: Type.String(),
+                toolChain: Type.Array(Type.String()),
+                parameters: Type.Optional(Type.Record(Type.String(), Type.Any())),
+                examples: Type.Optional(Type.Array(Type.Any())),
+                edgeCases: Type.Optional(Type.Array(Type.Any())),
+            }),
+            async execute(_id, params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const generated = await state.skillGenerator.generateFromTask(params.taskType, params.toolChain, params.parameters || {}, params.examples || [], params.edgeCases || []);
+                if (generated) {
+                    return okResult(JSON.stringify(generated, null, 2), { skillId: generated.skillId });
+                }
+                return errResult('Skill generation failed');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_skill_generator_stats',
+            label: 'ZCrystal Skill Generator Stats',
+            description: 'Get skill generator statistics',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const stats = state.skillGenerator.getGenerationStats();
+                return okResult(JSON.stringify(stats, null, 2));
+            },
+        });
+        // =====================================================================
+        // Circuit Breaker Integration
+        // =====================================================================
+        api.registerTool({
+            name: 'zcrystal_circuit_status',
+            label: 'ZCrystal Circuit Breaker Status',
+            description: 'Get circuit breaker current state and stats',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const cbState = state.circuitBreaker.getState();
+                const stats = state.circuitBreaker.getStats();
+                const canExecute = state.circuitBreaker.canExecute();
+                return okResult(JSON.stringify({ state: cbState, stats, canExecute }, null, 2));
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_circuit_reset',
+            label: 'ZCrystal Circuit Breaker Reset',
+            description: 'Reset circuit breaker to closed state',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                state.circuitBreaker.reset();
+                return okResult('Circuit breaker reset to CLOSED state');
+            },
+        });
+        api.registerTool({
+            name: 'zcrystal_circuit_check',
+            label: 'ZCrystal Circuit Check',
+            description: 'Check if operation can be executed (Agent-internal)',
+            parameters: Type.Object({}),
+            async execute(_id, _params) {
+                if (!state)
+                    return errResult('Plugin not initialized');
+                const canExecute = state.circuitBreaker.canExecute();
+                if (canExecute) {
+                    return okResult('Circuit allows execution');
+                }
+                return errResult('Circuit breaker is OPEN - operation blocked');
+            },
+        }, { optional: true });
         // =====================================================================
         // Commands
         // =====================================================================
