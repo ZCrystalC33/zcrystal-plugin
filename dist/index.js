@@ -130,6 +130,39 @@ export default definePluginEntry({
             skillAdapter, skillSyncManager, replayRunner, hookRegistry
         };
         // =====================================================================
+        // Auto-Trigger Setup (Heartbeat & Proactive Check)
+        // =====================================================================
+        // Auto-run heartbeat every 5 minutes
+        setInterval(async () => {
+            try {
+                if (state) {
+                    const status = await state.router.healthCheck();
+                    const evo = await state.router.getEvolutionStatus();
+                    if (status.success) {
+                        console.log('[ZCrystal Heartbeat] OK - Evolution:', evo.data?.running ? 'running' : 'idle');
+                    }
+                }
+            }
+            catch (e) {
+                console.error('[ZCrystal Heartbeat] Error:', e);
+            }
+        }, 5 * 60 * 1000); // 5 minutes
+        // Auto-run proactive check every 10 minutes
+        setInterval(async () => {
+            try {
+                if (state) {
+                    const sessionResult = await state.router.memoryLoad('L2', 'session:current');
+                    const suggestions = state.reviewEngine.getUpgradeSuggestions();
+                    if (sessionResult.success && sessionResult.data && suggestions.length > 0) {
+                        console.log('[ZCrystal Proactive] Session active,', suggestions.length, 'suggestions available');
+                    }
+                }
+            }
+            catch (e) {
+                console.error('[ZCrystal Proactive] Error:', e);
+            }
+        }, 10 * 60 * 1000); // 10 minutes
+        // =====================================================================
         // Core Tools (Original ZCrystal + ZCrystal_evo)
         // =====================================================================
         api.registerTool({
