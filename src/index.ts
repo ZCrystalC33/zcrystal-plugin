@@ -598,6 +598,6 @@ export default definePluginEntry({
       if (content) await state.router.memoryStoreData('L2', 'last_ai_response', content);
     }, { name: 'zcrystal:msg_sent' });
 
-    console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 100');
+    console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 95');
   },
 });
