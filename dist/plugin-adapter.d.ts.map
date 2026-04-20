@@ -1,0 +1,1 @@
+{"version":3,"file":"plugin-adapter.d.ts","sourceRoot":"","sources":["../src/plugin-adapter.ts"],"names":[],"mappings":"AAAA;;;;GAIG;;;;;;;;AA0EH,wBAuIG;AAMH,OAAO,EAAE,gBAAgB,EAAE,MAAM,kBAAkB,CAAC;AACpD,OAAO,EAAE,mBAAmB,EAAE,MAAM,uBAAuB,CAAC;AAC5D,OAAO,EAAE,YAAY,EAAE,MAAM,oBAAoB,CAAC;AAClD,OAAO,EAAE,YAAY,EAAE,MAAM,oBAAoB,CAAC;AAClD,OAAO,EAAE,aAAa,EAAE,MAAM,qBAAqB,CAAC"}
