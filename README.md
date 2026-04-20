@@ -53,12 +53,61 @@ ZCrystal Plugin 是專為 OpenClaw 設計的進階插件，整合了自我進化
 
 ## 安裝方式 | Installation
 
-### 前置需求
+### 📌 系統需求 | System Requirements
 
-- Node.js ≥ 22.0.0
-- OpenClaw ≥ 2026.4.12
+| 項目 | 最低版本 | 備註 |
+|------|----------|------|
+| Node.js | ≥ 22.0.0 | 當前環境：v24.14.1 |
+| npm | - | 需與 Node.js 一起安裝 |
+| OpenClaw | ≥ 2026.4.12 | 插件兼容性門檻 |
+| 作業系統 | Linux / macOS / Windows (WSL) | Bash 腳本需要在 Unix-like 環境 |
+| 磁碟空間 | ~100 MB | 含 node_modules + dist |
 
-### 安裝步驟
+### 📦 依賴列表 | Dependencies
+
+**生產依賴 | Production Dependencies**
+
+| 套件 | 版本 | 用途 |
+|------|------|------|
+| `openclaw` | `^2026.4.8` | OpenClaw 核心框架 |
+| `@sinclair/typebox` | `^0.34.49` | 類型定義（Schema 驗證） |
+| `fuse.js` | `^7.0.0` | 模糊搜索（Fuzzy Search） |
+| `@zcrystal/evo` | `file:/home/snow/ZCrystal_evo` | 本地自我進化引擎（路徑依賴） |
+
+**開發依賴 | Dev Dependencies**
+
+| 套件 | 版本 | 用途 |
+|------|------|------|
+| `typescript` | `^5.6.0` | TypeScript 編譯器 |
+| `vitest` | `^4.1.4` | 單元測試框架 |
+| `@types/node` | `^22.19.17` | Node.js 型別定義 |
+
+### 🔧 安裝方式 | Installation Methods
+
+#### 方式一：自動安裝（推薦）| Automatic Installation (Recommended)
+
+```bash
+# 進入插件目錄
+cd ~/.openclaw/workspace/zcrystal-plugin
+
+# 執行互動式安裝精靈
+npm run setup
+
+# 或直接執行
+bash setup.sh
+```
+
+**setup.sh 會依序執行：**
+1. 檢查 Node.js / npm 版本
+2. 偵測 OpenClaw 安裝路徑
+3. 建立必要目錄
+4. 安裝 npm 依賴
+5. 建構 TypeScript
+6. 複製 `dist/index.js` → `~/.openclaw/extensions/zcrystal/dist/`
+7. 更新 `.env` 環境變數
+8. 最終驗證
+
+#### 方式二：手動逐步安裝 | Manual Installation
 
 ```bash
 # 1. 進入插件目錄
@@ -67,21 +116,162 @@ cd ~/.openclaw/workspace/zcrystal-plugin
 # 2. 安裝依賴
 npm install
 
-# 3. 建置 TypeScript
+# 3. 建構 TypeScript → JavaScript
 npm run build
 
-# 4. 複製到 OpenClaw 擴展目錄
+# 4. 建立擴展目錄
+mkdir -p ~/.openclaw/extensions/zcrystal/dist
+
+# 5. 複製編譯產物
 cp dist/index.js ~/.openclaw/extensions/zcrystal/dist/
+
+# 6. 驗證
+npm test
 ```
 
-### 驗證安裝
+### 🔨 建構指令 | Build Commands
 
 ```bash
-# 檢查健康狀態
-npx zcrystal-tools health
+# 建構 TypeScript → JavaScript（輸出到 dist/）
+npm run build
 
-# 執行測試
-npm run test
+# 等同於
+npx tsc
+```
+
+**TypeScript 編譯設定（tsconfig.json）：**
+
+| 設定 | 數值 |
+|------|------|
+| `target` | ES2022 |
+| `module` | ESNext |
+| `outDir` | `./dist` |
+| `strict` | true |
+| 輸出 | `.js` + `.d.ts` 宣告檔 + source map |
+
+### ✅ 測試指令 | Test Commands
+
+```bash
+# 執行所有測試（Vitest）
+npm test
+
+# 等同於
+npx vitest run
+
+# 帶 UI 觀看模式（開發時）
+npx vitest
+```
+
+**測試涵蓋範圍：**
+- `src/tools/core-tools.test.ts`
+- `src/tools/skill-tools.test.ts`
+- `src/tools/task-tools.test.ts`
+- `src/tools/system-tools.test.ts`
+- `src/tools/workflow-tools.test.ts`
+- `src/tools/proactive-tools.test.ts`
+
+**測試結果：101 tests passed**
+
+### 📤 發布指令 | Publish Commands
+
+```bash
+# 登入 npm（需有發布帳號權限）
+npm login
+
+# 發布為公開套件
+npm publish --access public
+
+# 發布測試（dry-run）
+npm publish --dry-run
+
+# 為當前版本打 Git tag
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+**發布前檢查清單：**
+```bash
+# 確保所有檢查通過
+npm run build && npm run test
+npm publish --access public
+```
+
+### ⚙️ 插件配置 | Plugin Configuration
+
+**openclaw.plugin.json：**
+
+```json
+{
+  "id": "zcrystal",
+  "name": "ZCrystal",
+  "version": "0.3.0",
+  "configSchema": {
+    "honchoBaseUrl": {
+      "type": "string",
+      "default": "http://localhost:8000"
+    },
+    "workspace": {
+      "type": "string",
+      "default": "openclaw"
+    },
+    "selfEvolution": {
+      "enabled": true,
+      "onCompactOnly": true
+    },
+    "skills": {
+      "autoDiscover": true,
+      "paths": ["~/.openclaw/skills"]
+    }
+  }
+}
+```
+
+### 🔑 環境變數（可選）| Environment Variables (Optional)
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `ZCRYSTAL_DATA_PATH` | `~/.openclaw/extensions/zcrystal` | 資料儲存路徑 |
+| `ZCRYSTAL_SKILLS_PATH` | `~/.openclaw/skills` | 技能檔案路徑 |
+| `ZCRYSTAL_FTS5_PORT` | `18795` | FTS5 MCP 服務埠 |
+| `ZCRYSTAL_EVOLUTION_INTERVAL` | `3600000` (ms) | 自動進化間隔 |
+
+### 📁 目錄結構 | Directory Structure
+
+```
+zcrystal-plugin/
+├── dist/                          # 編譯輸出目錄（建構後產生）
+│   ├── index.js                   # 主入口點
+│   ├── index.d.ts                 # 型別宣告
+│   ├── tools/                     # 工具子模組
+│   ├── config.js
+│   ├── self-evolution.js
+│   ├── skill-manager.js
+│   ├── honcho-client.js
+│   └── fts5-bridge.js
+├── src/                           # 源碼目錄
+│   ├── index.ts                   # 主入口
+│   ├── config.ts
+│   ├── types.ts
+│   ├── self-evolution.ts          # 自我進化引擎
+│   ├── skill-manager.ts           # 技能管理器
+│   ├── fts5-bridge.ts             # FTS5 全文搜索橋接
+│   ├── honcho-client.ts           # Honcho 客戶端
+│   └── tools/                     # 工具實現
+│       ├── core-tools.ts
+│       ├── skill-tools.ts
+│       ├── task-tools.ts
+│       ├── workflow-tools.ts
+│       ├── proactive-tools.ts
+│       ├── system-tools.ts
+│       └── *.test.ts              # 測試檔案
+├── node_modules/                  # npm 依賴
+├── package.json                   # npm 設定
+├── tsconfig.json                  # TypeScript 設定
+├── vitest.config.ts               # Vitest 測試設定
+├── openclaw.plugin.json           # OpenClaw 插件描述
+├── setup.sh                       # 互動式安裝精靈
+├── install.sh                     # 安裝腳本
+└── README.md
 ```
 
 ---
