@@ -26,6 +26,9 @@ export class SkillManager {
   // Cache with TTL (5 minutes)
   private _cache: { skills: Skill[]; timestamp: number } | null = null;
   private readonly CACHE_TTL_MS = 5 * 60 * 1000;
+  // Simple in-memory search index (word -> skill slug set)
+  private _searchIndex: Map<string, Set<string>> = new Map();
+  private _indexValid = false;
 
   constructor(searchPaths: string[] = []) {
     this.searchPaths = searchPaths.map(p => p.replace('~', homedir()));
@@ -55,6 +58,10 @@ export class SkillManager {
     
     // Update cache
     this._cache = { skills: result, timestamp: Date.now() };
+    
+    // Rebuild search index
+    this.buildSearchIndex();
+    
     return result;
   }
   
@@ -63,6 +70,7 @@ export class SkillManager {
    */
   clearCache(): void {
     this._cache = null;
+    this._indexValid = false;
   }
 
   /**
@@ -218,23 +226,70 @@ export class SkillManager {
   }
 
   /**
-   * Search skills by name/description
+   * Build search index for fast lookup
    */
-  searchSkills(query: string, limit = 10): Skill[] {
-    const lowerQuery = query.toLowerCase();
-    const results: Skill[] = [];
+  private buildSearchIndex(): void {
+    this._searchIndex.clear();
     
     for (const skill of this.skills.values()) {
-      if (
-        skill.name.toLowerCase().includes(lowerQuery) ||
-        skill.description.toLowerCase().includes(lowerQuery)
-      ) {
-        results.push(skill);
-        if (results.length >= limit) break;
+      // Index words from name and description
+      const words = this.extractWords(skill.name + ' ' + skill.description);
+      for (const word of words) {
+        if (!this._searchIndex.has(word)) {
+          this._searchIndex.set(word, new Set());
+        }
+        this._searchIndex.get(word)!.add(skill.slug);
       }
     }
     
-    return results;
+    this._indexValid = true;
+  }
+  
+  /**
+   * Extract searchable words from text
+   */
+  private extractWords(text: string): string[] {
+    return text
+      .toLowerCase()
+      .split(/[\s\-_.,!?;:\(\)\[\]{}]+/)
+      .filter(w => w.length >= 2);
+  }
+
+  /**
+   * Search skills using indexed lookup (O(k) vs O(n))
+   */
+  searchSkills(query: string, limit = 10): Skill[] {
+    // Rebuild index if needed
+    if (!this._indexValid) {
+      this.buildSearchIndex();
+    }
+    
+    const queryWords = this.extractWords(query);
+    if (queryWords.length === 0) {
+      return Array.from(this.skills.values()).slice(0, limit);
+    }
+    
+    // Count matching skills
+    const matchCount = new Map<string, number>();
+    for (const word of queryWords) {
+      // Find skills matching this word
+      const partialMatches = [...this._searchIndex.entries()]
+        .filter(([key]) => key.includes(word))
+        .flatMap(([, slugs]) => [...slugs]);
+      
+      for (const slug of partialMatches) {
+        matchCount.set(slug, (matchCount.get(slug) || 0) + 1);
+      }
+    }
+    
+    // Sort by match count
+    const sorted = [...matchCount.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([slug]) => this.skills.get(slug))
+      .filter((s): s is Skill => s !== undefined);
+    
+    return sorted;
   }
 
   /**

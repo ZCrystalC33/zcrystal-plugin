@@ -16,6 +16,8 @@ export declare class SkillManager {
     private initialized;
     private _cache;
     private readonly CACHE_TTL_MS;
+    private _searchIndex;
+    private _indexValid;
     constructor(searchPaths?: string[]);
     /**
      * Discover all skills in configured paths (cached)
@@ -54,7 +56,15 @@ export declare class SkillManager {
      */
     getSkill(slug: string): Skill | undefined;
     /**
-     * Search skills by name/description
+     * Build search index for fast lookup
+     */
+    private buildSearchIndex;
+    /**
+     * Extract searchable words from text
+     */
+    private extractWords;
+    /**
+     * Search skills using indexed lookup (O(k) vs O(n))
      */
     searchSkills(query: string, limit?: number): Skill[];
     /**

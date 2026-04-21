@@ -48,6 +48,10 @@ const SKILL_SIZE_LIMIT = 15 * 1024;   // 15KB size limit
 const TOOL_DESC_LIMIT = 500;          // Tool description limit
 const MAX_CANDIDATES = 10;            // Max mutation candidates
 const MAX_TRACES = 100;               // Max traces per skill
+const MAX_HISTORY = 50;                 // Max evolution history entries
+const MAX_APPLIED = 100;               // Max applied candidates per skill
+const MAX_BACKUPS = 50;                // Max backups per skill
+const MAX_PENDING_TTL_MS = 30_000;     // 30s TTL for pending evaluations
 const RECOVERY_POINTER_VERSION = 1;   // Recovery pointer version
 
 // ============================================================
@@ -522,6 +526,11 @@ export class SelfEvolutionEngine {
     })();
 
     // Set up verification tracking
+    // Bounded applied candidates (FIFO eviction)
+    const appliedKeys = [...this.appliedCandidates.keys()].filter(k => k.startsWith(skillSlug));
+    if (appliedKeys.length >= MAX_APPLIED) {
+      this.appliedCandidates.delete(appliedKeys[0]);
+    }
     this.appliedCandidates.set(skillSlug, {
       content: result.bestCandidate.content,
       score: result.bestCandidate.score,
@@ -591,7 +600,11 @@ export class SelfEvolutionEngine {
     // Route evolution (Agent Orchestration - Pattern 7)
     const result = await this.routeEvolution(candidates, skill);
     
+    // Bounded evolution history (FIFO eviction)
     this.evolutionHistory.push(result);
+    if (this.evolutionHistory.length > MAX_HISTORY) {
+      this.evolutionHistory.shift();
+    }
     
     return result;
   }
@@ -1072,6 +1085,11 @@ Output ONLY the improved Prompt (no JSON, no commentary):`,
     })();
     
     // Set up verification tracking
+    // Bounded applied candidates (FIFO eviction)
+    const appliedKeys = [...this.appliedCandidates.keys()].filter(k => k.startsWith(skillSlug));
+    if (appliedKeys.length >= MAX_APPLIED) {
+      this.appliedCandidates.delete(appliedKeys[0]);
+    }
     this.appliedCandidates.set(skillSlug, {
       content: result.bestCandidate.content,
       score: result.bestCandidate.score,
