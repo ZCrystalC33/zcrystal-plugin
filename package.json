@@ -1,6 +1,6 @@
 {
   "name": "@zcrystal/openclaw-plugin",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "ZCrystal Plugin for OpenClaw - Proactive AI + Self-Evolution + Skills System",
   "openclaw": {

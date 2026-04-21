@@ -4,6 +4,43 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 ---
 
+# 2026-04-22
+
+## [v1.0.1] - 2026-04-22
+
+> **效能優化 + ClawCode 審查修復**
+
+### ⚡ Performance（效能優化）
+
+| Commit | 優化內容 | 預期改善 |
+|--------|----------|----------|
+| `61a1f6d` | 消除 redundant stat syscall | -50% I/O |
+| `2947998` | Memory bounds + Search indexing | ~5MB 上限，-70% 搜尋 |
+| `3219275` | Skill discovery cache + Workspace memoization | -80-90% 重複調用 |
+
+### 🔧 Bug Fixes（錯誤修復）
+
+| Commit | 修復內容 |
+|--------|----------|
+| `61a1f6d` | 消除 redundant stat syscall in skill discovery |
+| `45a28f3` | Hardcoded path `SCRIPT_DIR/../ZCrystal_evo` → `ZCRYSTAL_EVO_PATH` 環境變量 |
+| `45a28f3` | 新增 `CREATED_DIRS` 追蹤，支援 rollback |
+| `94d3789` | Version mismatch：新增 `minGatewayVersion: 2026.4.15` |
+| `94d3789` | setInterval cleanup：heartbeat/proactive intervals 在 unload 時清除 |
+
+### 🔍 Code Review（ClawCode 審查）
+
+| Commit | 審查內容 |
+|--------|----------|
+| `45a28f3` | Critical Issues Fix（路徑 hardcode、錯誤處理、rollback）|
+| `94d3789` | Warnings + Performance 修復 |
+
+### 📊 Test Results
+
+- `npm run build && npm test` → **101/101 tests passed** ✅
+
+---
+
 # 2026-04-21
 
 ## [v1.0.0] - 2026-04-21
@@ -80,8 +117,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 > **85 工具 + Proactive AI + Self-Evolution + Skills System**
 
-（完整內容見上述 v0.3.0 發布記錄）
-
 ---
 
 ## [0.2.0] - 2026-04-18
@@ -92,4 +127,4 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 ---
 
-*最後更新：2026-04-21 v1.0.0*
+*最後更新：2026-04-22 v1.0.1*
