@@ -57,6 +57,7 @@ export declare class SelfEvolutionEngine {
     private initPromise?;
     private appliedCandidates;
     private backups;
+    private readonly BACKUP_TTL_MS;
     private schedulerInterval?;
     constructor(skillManager: SkillManager, config?: Partial<EvolutionConfig>, honcho?: HonchoClient);
     /**
@@ -102,6 +103,10 @@ export declare class SelfEvolutionEngine {
      * Generate mutation candidates
      */
     private generateCandidates;
+    /**
+     * Clean up stale backups (TTL-based eviction)
+     */
+    private cleanupBackups;
     /**
      * Clean up stale pending evaluations (TTL-based eviction)
      */

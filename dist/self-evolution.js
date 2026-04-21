@@ -38,7 +38,7 @@ const MAX_CANDIDATES = 10; // Max mutation candidates
 const MAX_TRACES = 100; // Max traces per skill
 const MAX_HISTORY = 50; // Max evolution history entries
 const MAX_APPLIED = 100; // Max applied candidates per skill
-const MAX_BACKUPS = 50; // Max backups per skill
+// MAX_BACKUPS removed - backup map uses MAX_APPLIED for FIFO eviction
 const MAX_PENDING_TTL_MS = 30_000; // 30s TTL for pending evaluations
 const RECOVERY_POINTER_VERSION = 1; // Recovery pointer version
 // ============================================================
@@ -123,7 +123,9 @@ export class SelfEvolutionEngine {
     // Closed-Loop: Applied candidate verification
     appliedCandidates = new Map();
     // Closed-Loop: Backups for rollback
+    // Backup map with TTL-based eviction
     backups = new Map();
+    BACKUP_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
     // Closed-Loop: Scheduler
     schedulerInterval;
     constructor(skillManager, config = {}, honcho) {
@@ -361,7 +363,7 @@ export class SelfEvolutionEngine {
             try {
                 const currentContent = await this.skillManager.readSkillContent(skill);
                 this.backups.set(skillSlug, {
-                    content: currentContent,
+                    data: { content: currentContent, timestamp: Date.now() },
                     timestamp: Date.now(),
                 });
                 console.log(`[SelfEvolution] Backup created for ${skillSlug}`);
@@ -453,6 +455,27 @@ export class SelfEvolutionEngine {
     // ============================================================
     // LLM-as-Judge Evaluation (Phase 2)
     // ============================================================
+    /**
+     * Clean up stale backups (TTL-based eviction)
+     */
+    cleanupBackups() {
+        const now = Date.now();
+        for (const [key, entry] of this.backups.entries()) {
+            if (now - entry.timestamp > this.BACKUP_TTL_MS) {
+                this.backups.delete(key);
+            }
+        }
+        // Enforce max size (100 per skill prefix)
+        if (this.backups.size > 200) {
+            const oldestKeys = [...this.backups.entries()]
+                .sort((a, b) => a[1].timestamp - b[1].timestamp)
+                .slice(0, this.backups.size - 200)
+                .map(([key]) => key);
+            for (const key of oldestKeys) {
+                this.backups.delete(key);
+            }
+        }
+    }
     /**
      * Clean up stale pending evaluations (TTL-based eviction)
      */
@@ -818,7 +841,10 @@ Output ONLY the improved Prompt (no JSON, no commentary):`, 'quick');
     // Closed-Loop: Rollback
     // ============================================================
     async performRollback(skillSlug) {
-        const backup = this.backups.get(skillSlug);
+        // Clean up old backups first
+        this.cleanupBackups();
+        const entry = this.backups.get(skillSlug);
+        const backup = entry?.data;
         if (!backup) {
             console.warn(`[SelfEvolution] No backup found for ${skillSlug}, cannot rollback`);
             return false;
@@ -859,7 +885,7 @@ Output ONLY the improved Prompt (no JSON, no commentary):`, 'quick');
             try {
                 const currentContent = await this.skillManager.readSkillContent(skill);
                 this.backups.set(skillSlug, {
-                    content: currentContent,
+                    data: { content: currentContent, timestamp: Date.now() },
                     timestamp: Date.now(),
                 });
                 console.log(`[SelfEvolution] Backup created for ${skillSlug}`);
