@@ -144,8 +144,8 @@ export default definePluginEntry({
         // =====================================================================
         // Auto-Trigger Setup (Heartbeat & Proactive Check)
         // =====================================================================
-        // Auto-run heartbeat every 5 minutes
-        setInterval(async () => {
+        // Auto-run heartbeat every 5 minutes (stored for cleanup)
+        const heartbeatInterval = setInterval(async () => {
             try {
                 if (state) {
                     const status = await state.router.healthCheck();
@@ -159,8 +159,8 @@ export default definePluginEntry({
                 console.error('[ZCrystal Heartbeat] Error:', e);
             }
         }, 5 * 60 * 1000); // 5 minutes
-        // Auto-run proactive check every 10 minutes
-        setInterval(async () => {
+        // Auto-run proactive check every 10 minutes (stored for cleanup)
+        const proactiveInterval = setInterval(async () => {
             try {
                 if (state) {
                     const sessionResult = await state.router.memoryLoad('L2', 'session:current');
@@ -174,6 +174,12 @@ export default definePluginEntry({
                 console.error('[ZCrystal Proactive] Error:', e);
             }
         }, 10 * 60 * 1000); // 10 minutes
+        // Cleanup on unload (if supported by OpenClaw)
+        api.registerHook('unload', () => {
+            clearInterval(heartbeatInterval);
+            clearInterval(proactiveInterval);
+            console.log('[ZCrystal] Intervals cleared on unload');
+        });
         // =====================================================================
         // Register Tools by Domain
         // =====================================================================
