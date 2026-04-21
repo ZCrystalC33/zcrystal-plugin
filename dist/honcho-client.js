@@ -145,9 +145,47 @@ export class HonchoClient {
         }
     }
     // ============================================================
+    // Safety Gates (prevent feedback loops & runaway writes)
+    // ============================================================
+    _writeCountToday = 0;
+    _writeCountDate = '';
+    _lastWriteHash = '';
+    _lastWriteTime = 0;
+    MAX_WRITES_PER_DAY = 100;
+    MIN_WRITE_INTERVAL_MS = 2000; // 2s between writes
+    _checkAndRecordWrite(content) {
+        const today = new Date().toISOString().slice(0, 10);
+        if (this._writeCountDate !== today) {
+            this._writeCountDate = today;
+            this._writeCountToday = 0;
+        }
+        if (this._writeCountToday >= this.MAX_WRITES_PER_DAY) {
+            console.warn(`[ZCrystal Honcho] Daily write limit reached (${this.MAX_WRITES_PER_DAY}). Blocked.`);
+            return false;
+        }
+        const hash = content.slice(0, 200).replace(/\s+/g, ' ').trim();
+        if (hash === this._lastWriteHash) {
+            console.debug('[ZCrystal Honcho] Duplicate content, skipping write.');
+            return false;
+        }
+        const now = Date.now();
+        if (now - this._lastWriteTime < this.MIN_WRITE_INTERVAL_MS) {
+            console.warn('[ZCrystal Honcho] Write rate limited (too fast).');
+            return false;
+        }
+        this._writeCountToday++;
+        this._lastWriteHash = hash;
+        this._lastWriteTime = now;
+        return true;
+    }
+    // ============================================================
     // Messages - Write via POST, Read via Session Context
     // ============================================================
     async addMessages(sessionName, messages) {
+        // Safety gate: check before writing
+        if (messages.length > 0 && !this._checkAndRecordWrite(messages[0].content)) {
+            return false;
+        }
         try {
             await this.ensureWorkspace();
             // Convert to snake_case for API

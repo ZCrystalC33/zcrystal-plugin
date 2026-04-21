@@ -39,6 +39,13 @@ export declare class HonchoClient {
     listPeers(): Promise<Peer[]>;
     session(sessionName: string, _peerIds?: string[]): Promise<Session | null>;
     listSessions(): Promise<Session[]>;
+    private _writeCountToday;
+    private _writeCountDate;
+    private _lastWriteHash;
+    private _lastWriteTime;
+    private readonly MAX_WRITES_PER_DAY;
+    private readonly MIN_WRITE_INTERVAL_MS;
+    private _checkAndRecordWrite;
     addMessages(sessionName: string, messages: Array<{
         content: string;
         peerId: string;
