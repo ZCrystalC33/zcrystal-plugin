@@ -88,13 +88,16 @@ export class SkillManager {
         const fullPath = join(dirPath, entry.name);
         
         if (entry.isDirectory()) {
-          // Check for SKILL.md in subdirectory
+          // Check for SKILL.md in subdirectory (direct read avoids extra stat)
           const skillMdPath = join(fullPath, 'SKILL.md');
           try {
-            await stat(skillMdPath);
+            // Direct readFile is 1 syscall vs stat+readFile = 2 syscalls
             const skill = await this.parseSkill(fullPath);
             if (skill) {
               this.skills.set(skill.slug, skill);
+            } else {
+              // Not a skill directory, recurse
+              await this.discoverInDirectory(fullPath, depth + 1);
             }
           } catch {
             // Not a skill directory, recurse
