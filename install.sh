@@ -16,6 +16,9 @@ set -e
 VERSION="1.0.0"
 PLUGIN_NAME="@zcrystal/openclaw-plugin"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Track created files/dirs for rollback
+CREATED_DIRS=()
 OPENCLAW_PATH="${OPENCLAW_PATH:-$HOME/.openclaw}"
 ZCrystal_DATA_PATH="${ZCRYSTAL_DATA_PATH:-$OPENCLAW_PATH/extensions/zcrystal}"
 
@@ -146,7 +149,7 @@ setup_directories() {
 setup_zcrystal_evo() {
     log_info "Setting up ZCrystal_evo dependency..."
     
-    local evo_path="$SCRIPT_DIR/../ZCrystal_evo"
+    local evo_path="${ZCRYSTAL_EVO_PATH:-$SCRIPT_DIR/../ZCrystal_evo}"
     
     if [ ! -d "$evo_path" ]; then
         log_error "ZCrystal_evo not found at: $evo_path"
