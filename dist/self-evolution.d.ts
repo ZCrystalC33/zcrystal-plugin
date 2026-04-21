@@ -103,6 +103,10 @@ export declare class SelfEvolutionEngine {
      */
     private generateCandidates;
     /**
+     * Clean up stale pending evaluations (TTL-based eviction)
+     */
+    private cleanupPendingEvaluations;
+    /**
      * Async evaluation with promise memoization (Select - Pattern 4)
      */
     private scoreCandidateAsync;

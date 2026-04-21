@@ -218,7 +218,8 @@ export class SelfEvolutionEngine {
   private config: EvolutionConfig;
   
   // Promise memoization (Select - Pattern 4)
-  private pendingEvaluations: Map<string, Promise<LLMEvaluationResult>> = new Map();
+  // Promise memoization with TTL-based cleanup (Select - Pattern 4)
+  private pendingEvaluations: Map<string, { promise: Promise<LLMEvaluationResult>; timestamp: number }> = new Map();
   
   // Initializer state (Long-Running - Pattern 12)
   private initialized = false;
@@ -633,6 +634,28 @@ export class SelfEvolutionEngine {
   // ============================================================
 
   /**
+   * Clean up stale pending evaluations (TTL-based eviction)
+   */
+  private cleanupPendingEvaluations(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.pendingEvaluations.entries()) {
+      if (now - entry.timestamp > MAX_PENDING_TTL_MS) {
+        this.pendingEvaluations.delete(key);
+      }
+    }
+    // Also enforce max size
+    if (this.pendingEvaluations.size > 100) {
+      const oldestKeys = [...this.pendingEvaluations.entries()]
+        .sort((a, b) => a[1].timestamp - b[1].timestamp)
+        .slice(0, this.pendingEvaluations.size - 100)
+        .map(([key]) => key);
+      for (const key of oldestKeys) {
+        this.pendingEvaluations.delete(key);
+      }
+    }
+  }
+
+  /**
    * Async evaluation with promise memoization (Select - Pattern 4)
    */
   private async scoreCandidateAsync(
@@ -644,15 +667,19 @@ export class SelfEvolutionEngine {
     const memoKey = `${skill.slug}:${index}:${content.substring(0, 50)}`;
     
     // Check if already pending
+    // Clean up old pending evaluations first
+    this.cleanupPendingEvaluations();
+    
     const pending = this.pendingEvaluations.get(memoKey);
     if (pending) {
-      const evaluation = await pending;
+      // Check if promise is still pending
+      const evaluation = await pending.promise;
       return this.createCandidate(content, index, evaluation, skill);
     }
     
-    // Create and memoize promise
+    // Create and memoize promise with timestamp
     const evalPromise = this.evaluateWithLLM(content);
-    this.pendingEvaluations.set(memoKey, evalPromise);
+    this.pendingEvaluations.set(memoKey, { promise: evalPromise, timestamp: Date.now() });
     
     try {
       const evaluation = await evalPromise;

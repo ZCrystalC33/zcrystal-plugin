@@ -268,7 +268,9 @@ export default definePluginEntry({
     api.registerHook('unload', () => {
       clearInterval(heartbeatInterval);
       clearInterval(proactiveInterval);
-      console.log('[ZCrystal] Intervals cleared on unload');
+      // Stop evolution scheduler to prevent background tasks from running
+      state?.evolutionScheduler?.stop();
+      console.log('[ZCrystal] Cleanup complete on unload');
     });
 
 
