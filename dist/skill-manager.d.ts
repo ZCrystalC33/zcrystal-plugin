@@ -14,11 +14,17 @@ export declare class SkillManager {
     private skills;
     private searchPaths;
     private initialized;
+    private _cache;
+    private readonly CACHE_TTL_MS;
     constructor(searchPaths?: string[]);
     /**
-     * Discover all skills in configured paths
+     * Discover all skills in configured paths (cached)
      */
     discover(): Promise<Skill[]>;
+    /**
+     * Clear the cache to force rediscovery
+     */
+    clearCache(): void;
     /**
      * Discover skills in a directory (recursive)
      */

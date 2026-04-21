@@ -32,6 +32,8 @@ export declare class HonchoClient {
     private baseUrl;
     private workspace;
     private apiKey?;
+    private _workspaceChecked;
+    private _workspaceValid;
     constructor(baseUrl: string, workspace: string, apiKey?: string);
     private getHeaders;
     ensureWorkspace(): Promise<boolean>;

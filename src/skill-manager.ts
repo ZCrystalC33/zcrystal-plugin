@@ -23,15 +23,23 @@ export class SkillManager {
   private skills: Map<string, Skill> = new Map();
   private searchPaths: string[] = [];
   private initialized = false;
+  // Cache with TTL (5 minutes)
+  private _cache: { skills: Skill[]; timestamp: number } | null = null;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000;
 
   constructor(searchPaths: string[] = []) {
     this.searchPaths = searchPaths.map(p => p.replace('~', homedir()));
   }
 
   /**
-   * Discover all skills in configured paths
+   * Discover all skills in configured paths (cached)
    */
   async discover(): Promise<Skill[]> {
+    // Return cached result if still valid
+    if (this._cache && Date.now() - this._cache.timestamp < this.CACHE_TTL_MS) {
+      return this._cache.skills;
+    }
+
     this.skills.clear();
     
     for (const basePath of this.searchPaths) {
@@ -43,7 +51,18 @@ export class SkillManager {
     }
     
     this.initialized = true;
-    return Array.from(this.skills.values());
+    const result = Array.from(this.skills.values());
+    
+    // Update cache
+    this._cache = { skills: result, timestamp: Date.now() };
+    return result;
+  }
+  
+  /**
+   * Clear the cache to force rediscovery
+   */
+  clearCache(): void {
+    this._cache = null;
   }
 
   /**

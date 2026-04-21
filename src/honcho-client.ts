@@ -56,6 +56,9 @@ export class HonchoClient {
   private baseUrl: string;
   private workspace: string;
   private apiKey?: string;
+  // Memoize workspace check
+  private _workspaceChecked = false;
+  private _workspaceValid = false;
 
   constructor(baseUrl: string, workspace: string, apiKey?: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -80,12 +83,19 @@ export class HonchoClient {
   // Workspace Management
   // ============================================================
   async ensureWorkspace(): Promise<boolean> {
+    // Return cached result if already validated
+    if (this._workspaceChecked && this._workspaceValid) return true;
+    
     try {
       // Try to get workspace first
       const resp = await fetch(`${this.baseUrl}/v3/workspaces/${this.workspace}`, {
         headers: this.getHeaders(),
       });
-      if (resp.ok) return true;
+      if (resp.ok) {
+        this._workspaceChecked = true;
+        this._workspaceValid = true;
+        return true;
+      }
 
       // Create workspace if doesn't exist
       const createResp = await fetch(`${this.baseUrl}/v3/workspaces`, {
@@ -96,8 +106,13 @@ export class HonchoClient {
           metadata: { created_by: 'zcrystal-plugin' }
         }),
       });
-      return createResp.ok || createResp.status === 201;
+      const success = createResp.ok || createResp.status === 201;
+      this._workspaceChecked = true;
+      this._workspaceValid = success;
+      return success;
     } catch {
+      this._workspaceChecked = true;
+      this._workspaceValid = false;
       return false;
     }
   }
