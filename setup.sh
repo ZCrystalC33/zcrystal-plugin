@@ -23,7 +23,7 @@ ZCrystal_SKILLS_PATH="$OPENCLAW_PATH/skills"
 print_header() {
     echo -e "${BLUE}"
     echo "╔═══════════════════════════════════════════════════════════╗"
-    echo "║         ZCrystal Plugin Setup Wizard v0.7.0              ║"
+    echo "║         ZCrystal Plugin Setup Wizard v1.0.0              ║"
     echo "╚═══════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }

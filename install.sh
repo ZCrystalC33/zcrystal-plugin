@@ -13,7 +13,7 @@ set -e
 # =============================================================================
 # Configuration
 # =============================================================================
-VERSION="0.7.0"
+VERSION="1.0.0"
 PLUGIN_NAME="@zcrystal/openclaw-plugin"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPENCLAW_PATH="${OPENCLAW_PATH:-$HOME/.openclaw}"
@@ -155,8 +155,9 @@ setup_zcrystal_evo() {
     
     log_success "ZCrystal_evo found: $evo_path"
     
-    # Create package.json for ZCrystal_evo
-    cat > "$evo_path/package.json" << 'EOF'
+    # Only create package.json if it doesn't exist
+    if [ ! -f "$evo_path/package.json" ]; then
+        cat > "$evo_path/package.json" << 'EOF'
 {
   "name": "@zcrystal/evo",
   "version": "0.3.0",
@@ -172,6 +173,7 @@ setup_zcrystal_evo() {
   }
 }
 EOF
+    fi
     
     # Build ZCrystal_evo
     log_info "Building ZCrystal_evo..."
