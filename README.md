@@ -2,10 +2,11 @@
 
 > **v1.0.1** — 自我進化插件 / Self-Evolution Engine / Proactive AI
 
-[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](CHANGELOG.md)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.0.0-brightgreen)](package.json)
 [![OpenClaw](https://img.shields.io/badge/openclaw-2026.4.15-blueviolet)](openclaw.plugin.json)
 [![Tests](https://img.shields.io/badge/tests-101%2F101-brightgreen)](package.json)
+[![Status](https://img.shields.io/badge/status-production%20ready-brightgreen)]
 
 ---
 
