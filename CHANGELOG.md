@@ -127,4 +127,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 ---
 
-*最後更新：2026-04-22 v1.0.1*
+
+---
+
+## [v1.0.2] - 2026-04-22
+
+> **部署驗證 + 穩定性更新**
+
+### ✅ Deployment Verified
+
+| 指標 | 數值 |
+|------|------|
+| Gateway Memory | 836 MB (4.0%) |
+| Gateway Uptime | 7h 41m |
+| Gateway Health | ✅ OK |
+| Tests | 101/101 passed |
+
+### ⚡ Performance（已含於 v1.0.1）
+
+| 優化 | 說明 |
+|------|------|
+| Skill discovery cache | 5min TTL memoization |
+| Workspace memoization | 避免重複 HTTP 呼叫 |
+| Memory bounds | MAX_HISTORY/APPLIED/BACKUPS 上限 |
+| Search indexing | O(n) → O(k) 搜尋 |
+| TTL cleanup | pendingEvaluations 30s, backups 24h |
+
+### 🔧 ClawCode Fixes（已含於 v1.0.1）
+
+| 問題 | 修復 |
+|------|------|
+| Constructor 類型驗證 | ZCrystal_evo .d.ts 對照正確 |
+| pendingEvaluations leak | TTL + size eviction |
+| Scheduler cleanup | unload hook 呼叫 stop() |
+
+*最後更新：2026-04-22 v1.0.2*
