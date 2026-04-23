@@ -20,7 +20,7 @@
     "build": "tsc",
     "test": "vitest run",
     "setup": "bash setup.sh",
-    "postinstall": "npm run build"
+    "postinstall": "bash scripts/setup-evo.sh && npm run build"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.49",
