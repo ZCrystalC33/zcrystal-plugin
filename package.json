@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.49",
-    "@zcrystal/evo": "file:/home/snow/ZCrystal_evo",
+    "@zcrystal/evo": "file:./node_modules/@zcrystal/evo",
     "fuse.js": "^7.0.0",
     "openclaw": "^2026.4.15"
   },
