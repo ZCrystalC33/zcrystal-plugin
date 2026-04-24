@@ -1,14 +1,14 @@
 /**
  * Self-Evolution Engine for ZCrystal Plugin
- * 
+ *
  * Aligns with: https://github.com/nousresearch/hermes-agent-self-evolution
- * 
+ *
  * Features:
  * - DSPy + GEPA (Genetic-Pareto Prompt Evolution)
  * - LLM-as-Judge evaluation
  * - Reflexion correction
  * - Skill optimization
- * 
+ *
  * 13 Harness Patterns Compliance:
  * 1. Memory Persistence - Dual storage (memory + disk)
  * 2. Skill Runtime - Lazy-load with trigger前置
@@ -36,6 +36,8 @@ import { SkillManager } from './skill-manager.js';
 import { HonchoClient } from './honcho-client.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 // ============================================================
 // Constants (Magic Number Replacement)
@@ -63,6 +65,11 @@ const VERIFICATION_COUNT = 20;           // Verify with 20 traces before confirm
 const DEGRADATION_THRESHOLD = 0.5;        // Rollback if verified success rate < 50%
 const SCHEDULER_INTERVAL_MS = 60 * 60 * 1000;  // 1 hour between scheduled checks
 const MIN_TRACES_FOR_ANALYSIS = 10;       // Min traces to analyze before triggering
+
+// Persistence constants
+const TRACES_FILE = 'traces.json';
+const RECOVERY_FILE = 'recovery.json';
+const MAX_TRACES_PER_SKILL = 100;
 
 // ============================================================
 // Typed IDs (Task Decomposition - Pattern 9)
@@ -216,29 +223,29 @@ export class SelfEvolutionEngine {
   private evolutionHistory: EvolutionResult[] = [];
   private recoveryPoints: Map<EvolutionId, RecoveryPointer> = new Map();
   private config: EvolutionConfig;
-  
+
   // Promise memoization (Select - Pattern 4)
   // Promise memoization with TTL-based cleanup (Select - Pattern 4)
   private pendingEvaluations: Map<string, { promise: Promise<LLMEvaluationResult>; timestamp: number }> = new Map();
-  
+
   // Initializer state (Long-Running - Pattern 12)
   private initialized = false;
   private initPromise?: Promise<void>;
-  
+
   // Closed-Loop: Applied candidate verification
   private appliedCandidates: Map<string, AppliedCandidate> = new Map();
-  
+
   // Closed-Loop: Backups for rollback
   // Backup map with TTL-based eviction
   private backups: Map<string, { data: Backup; timestamp: number }> = new Map();
   private readonly BACKUP_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-  
+
   // Closed-Loop: Scheduler
   private schedulerInterval?: ReturnType<typeof setInterval>;
 
   constructor(
-    skillManager: SkillManager, 
-    config: Partial<EvolutionConfig> = {}, 
+    skillManager: SkillManager,
+    config: Partial<EvolutionConfig> = {},
     honcho?: HonchoClient
   ) {
     this.skillManager = skillManager;
@@ -261,12 +268,12 @@ export class SelfEvolutionEngine {
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    
+
     // Prevent double initialization
     if (this.initPromise) {
       return this.initPromise;
     }
-    
+
     this.initPromise = this.doInitialize();
     await this.initPromise;
     this.initialized = true;
@@ -285,25 +292,25 @@ export class SelfEvolutionEngine {
     // 4. Fourth: Start scheduler for periodic evolution
     this.startScheduler();
   }
-  
+
   // ============================================================
   // Closed-Loop: Scheduler (Periodic Evolution)
   // ============================================================
-  
+
   private startScheduler(): void {
     if (this.schedulerInterval) {
       clearInterval(this.schedulerInterval);
     }
-    
+
     this.schedulerInterval = setInterval(() => {
       this.runScheduledEvolution().catch(err => {
         console.error('[SelfEvolution] Scheduler error:', err);
       });
     }, SCHEDULER_INTERVAL_MS);
-    
+
     console.log('[SelfEvolution] Scheduler started (interval: 1 hour)');
   }
-  
+
   stopScheduler(): void {
     if (this.schedulerInterval) {
       clearInterval(this.schedulerInterval);
@@ -311,20 +318,20 @@ export class SelfEvolutionEngine {
       console.log('[SelfEvolution] Scheduler stopped');
     }
   }
-  
+
   private async runScheduledEvolution(): Promise<void> {
     console.log('[SelfEvolution] Running scheduled evolution check');
-    
+
     const skills = this.skillManager.getSkills();
     let evolved = 0;
-    
+
     for (const skill of skills) {
       const traces = this.getTraces(skill.slug);
-      
+
       if (traces.length >= MIN_TRACES_FOR_ANALYSIS) {
         const recentTraces = traces.slice(-MIN_TRACES_FOR_ANALYSIS);
         const successRate = recentTraces.filter(t => t.success).length / recentTraces.length;
-        
+
         if (successRate < SUCCESS_RATE_THRESHOLD) {
           console.log(`[SelfEvolution] Scheduled evolution for ${skill.slug} (success rate: ${(successRate * 100).toFixed(0)}%)`);
           try {
@@ -336,7 +343,7 @@ export class SelfEvolutionEngine {
         }
       }
     }
-    
+
     if (evolved === 0) {
       console.log('[SelfEvolution] No skills需要 scheduled evolution');
     }
@@ -354,45 +361,45 @@ export class SelfEvolutionEngine {
     // Local storage (primary)
     const existing = this.traces.get(skillSlug) || [];
     existing.push(trace);
-    
+
     // Enforce max traces (eviction)
     if (existing.length > MAX_TRACES) {
       existing.shift(); // FIFO eviction
     }
-    
+
     this.traces.set(skillSlug, existing);
-    
+
     // Disk persistence (secondary) - async, non-blocking
     this.persistTrace(skillSlug, trace).catch(() => {
       // Disk persistence failure is non-fatal
     });
-    
+
     // ============================================================
     // Closed-Loop: Auto-trigger based on success rate
     // ============================================================
     this.checkAutoTrigger(skillSlug);
-    
+
     // ============================================================
     // Closed-Loop: Verify applied candidates
     // ============================================================
     this.verifyAppliedCandidate(skillSlug, trace);
   }
-  
+
   private checkAutoTrigger(skillSlug: string): void {
     const traces = this.getTraces(skillSlug);
-    
+
     // Need enough traces to make a decision
     if (traces.length < MIN_TRACES_FOR_ANALYSIS) {
       return;
     }
-    
+
     const recentTraces = traces.slice(-MIN_TRACES_FOR_ANALYSIS);
     const successRate = recentTraces.filter(t => t.success).length / MIN_TRACES_FOR_ANALYSIS;
-    
+
     // If success rate is below threshold, trigger evolution
     if (successRate < SUCCESS_RATE_THRESHOLD) {
       console.log(`[SelfEvolution] Auto-trigger: ${skillSlug} success rate ${(successRate * 100).toFixed(0)}% < ${(SUCCESS_RATE_THRESHOLD * 100).toFixed(0)}%`);
-      
+
       const skill = this.skillManager.getSkill(skillSlug);
       if (skill) {
         // Fire and forget - evolution runs in background
@@ -402,31 +409,31 @@ export class SelfEvolutionEngine {
       }
     }
   }
-  
+
   private verifyAppliedCandidate(skillSlug: string, trace: ExecutionTrace): void {
     const applied = this.appliedCandidates.get(skillSlug);
     if (!applied) {
       return;
     }
-    
+
     // Count this trace
     applied.tracesCount++;
     if (trace.success) {
       applied.successCount++;
     }
-    
+
     // Check if we've collected enough verification traces
     if (applied.tracesCount >= VERIFICATION_COUNT) {
       const verifiedRate = applied.successCount / applied.tracesCount;
-      
+
       console.log(`[SelfEvolution] Verification complete for ${skillSlug}: ${(verifiedRate * 100).toFixed(0)}% success rate over ${applied.tracesCount} traces`);
-      
+
       // If verified success rate is below threshold, rollback
       if (verifiedRate < DEGRADATION_THRESHOLD) {
         console.log(`[SelfEvolution] Degradation detected for ${skillSlug}: ${(verifiedRate * 100).toFixed(0)}% < ${(DEGRADATION_THRESHOLD * 100).toFixed(0)}%, rolling back`);
         this.performRollback(skillSlug);
       }
-      
+
       // Clean up verification tracking
       this.appliedCandidates.delete(skillSlug);
     }
@@ -472,7 +479,7 @@ export class SelfEvolutionEngine {
    */
   async prepareEvolution(skill: Skill): Promise<EvolutionId> {
     const id = createEvolutionId('skill', skill.slug);
-    
+
     // Save recovery point before any mutation
     const content = await this.skillManager.readSkillContent(skill);
     this.recoveryPoints.set(id, {
@@ -481,7 +488,7 @@ export class SelfEvolutionEngine {
       timestamp: Date.now(),
       candidateId: 'none',
     });
-    
+
     return id;
   }
 
@@ -541,7 +548,7 @@ export class SelfEvolutionEngine {
       successCount: 0,
       appliedAt: Date.now(),
     });
-    
+
     console.log(`[SelfEvolution] Verification tracking started for ${skillSlug} (need ${VERIFICATION_COUNT} traces)`);
 
     return this.skillManager.writeSkillContent(skill, result.bestCandidate.content);
@@ -564,10 +571,10 @@ export class SelfEvolutionEngine {
 
     // Restore original content
     const success = await this.skillManager.writeSkillContent(skill, recovery.originalContent);
-    
+
     // Clean up recovery point
     this.recoveryPoints.delete(id);
-    
+
     return success;
   }
 
@@ -578,37 +585,37 @@ export class SelfEvolutionEngine {
   async evolveSkill(skill: Skill, options?: Partial<EvolutionOptions>): Promise<EvolutionResult> {
     // Ensure initialized (Bootstrap - Pattern 10)
     await this.initialize();
-    
+
     const iterations = options?.iterations || this.config.iterations || MAX_CANDIDATES;
     const candidates: EvolutionCandidate[] = [];
-    
+
     // Read current content
     const currentContent = await this.skillManager.readSkillContent(skill);
-    
+
     // Generate candidates (Task Decomposition - Pattern 9)
     const allVariants = this.generateCandidates(currentContent, iterations);
-    
+
     // Score each candidate (Memoize promise - Pattern 4)
-    const scoredPromises = allVariants.map((variant, index) => 
+    const scoredPromises = allVariants.map((variant, index) =>
       this.scoreCandidateAsync(skill, variant, index)
     );
-    
+
     // Wait for all evaluations (Multi-Agent - Pattern 11)
     const scoredCandidates = await Promise.all(scoredPromises);
     candidates.push(...scoredCandidates);
-    
+
     // Sort by score (Select - Pattern 4)
     candidates.sort((a, b) => b.score - a.score);
-    
+
     // Route evolution (Agent Orchestration - Pattern 7)
     const result = await this.routeEvolution(candidates, skill);
-    
+
     // Bounded evolution history (FIFO eviction)
     this.evolutionHistory.push(result);
     if (this.evolutionHistory.length > MAX_HISTORY) {
       this.evolutionHistory.shift();
     }
-    
+
     return result;
   }
 
@@ -617,7 +624,7 @@ export class SelfEvolutionEngine {
    */
   private generateCandidates(content: string, limit: number): string[] {
     const variants = new Set<string>([content]);
-    
+
     for (const rule of MUTATION_RULES) {
       for (const variant of [...variants]) {
         const mutations = rule.apply(variant);
@@ -627,7 +634,7 @@ export class SelfEvolutionEngine {
         }
       }
     }
-    
+
     return [...variants].slice(0, limit);
   }
 
@@ -689,22 +696,22 @@ export class SelfEvolutionEngine {
   ): Promise<EvolutionCandidate> {
     // Create memoization key
     const memoKey = `${skill.slug}:${index}:${content.substring(0, 50)}`;
-    
+
     // Check if already pending
     // Clean up old pending evaluations first
     this.cleanupPendingEvaluations();
-    
+
     const pending = this.pendingEvaluations.get(memoKey);
     if (pending) {
       // Check if promise is still pending
       const evaluation = await pending.promise;
       return this.createCandidate(content, index, evaluation, skill);
     }
-    
+
     // Create and memoize promise with timestamp
     const evalPromise = this.evaluateWithLLM(content);
     this.pendingEvaluations.set(memoKey, { promise: evalPromise, timestamp: Date.now() });
-    
+
     try {
       const evaluation = await evalPromise;
       return this.createCandidate(content, index, evaluation, skill);
@@ -725,17 +732,17 @@ export class SelfEvolutionEngine {
     if (content.length > SKILL_SIZE_LIMIT) {
       score = this.clampScore(score - 0.3);
     }
-    
+
     // Bonus for structure
     if (content.includes('## ') && content.includes('\n')) {
       score = this.clampScore(score + 0.1);
     }
-    
+
     // Bonus for examples
     if (content.includes('```') || content.includes('Example:')) {
       score = this.clampScore(score + 0.1);
     }
-    
+
     return {
       id: `candidate-${index}`,
       content,
@@ -930,7 +937,7 @@ Output ONLY valid JSON:
     evaluation: LLMEvaluationResult
   ): Promise<string | null> {
     if (!this.honcho) return null;
-    
+
     try {
       const response = await this.honcho.ask('system', `Analyze this Prompt's problems:
 
@@ -943,7 +950,7 @@ Output ONLY valid JSON:
 {"diagnosis": "What exactly is wrong", "suggestions": ["Fix 1", "Fix 2"]}`,
         'quick'
       );
-      
+
       const parsed = this.parseDiagnosisResponse(response);
       return parsed?.diagnosis ?? null;
     } catch {
@@ -956,7 +963,7 @@ Output ONLY valid JSON:
     diagnosis: string
   ): Promise<string | null> {
     if (!this.honcho) return null;
-    
+
     try {
       const response = await this.honcho.ask('system', `Based on the diagnosis, generate an improved Prompt:
 
@@ -969,7 +976,7 @@ ${diagnosis}
 Output ONLY the improved Prompt (no JSON, no commentary):`,
         'quick'
       );
-      
+
       return response.trim();
     } catch {
       return null;
@@ -1060,16 +1067,85 @@ Output ONLY the improved Prompt (no JSON, no commentary):`,
   // Persistence (Memory Persistence - Pattern 1)
   // ============================================================
 
-  private async persistTrace(skillSlug: string, trace: ExecutionTrace): Promise<void> {
-    // Placeholder for disk persistence
-    // In production, this would write to a JSON file or SQLite
-    const traceId = createTraceId(skillSlug, trace.timestamp);
-    console.debug(`[SelfEvolution] Persisting trace: ${traceId}`);
+  private async ensureDataDir(): Promise<void> {
+    if (!existsSync(this.dataDir)) {
+      await mkdir(this.dataDir, { recursive: true });
+    }
   }
 
-  private loadRecoveryPoints(): void {
-    // Placeholder for loading recovery points from disk
-    // In production, this would read from a recovery file
+  private async persistTrace(skillSlug: string, trace: ExecutionTrace): Promise<void> {
+    try {
+      await this.ensureDataDir();
+      const traceId = createTraceId(skillSlug, trace.timestamp);
+      const filePath = join(this.dataDir, TRACES_FILE);
+
+      // Load existing traces
+      let allTraces: Array<{ skillSlug: string; trace: ExecutionTrace }> = [];
+      try {
+        if (existsSync(filePath)) {
+          const raw = await readFile(filePath, 'utf-8');
+          allTraces = JSON.parse(raw);
+        }
+      } catch {
+        // File doesn't exist or is corrupted, start fresh
+        allTraces = [];
+      }
+
+      // Add new trace and enforce per-skill limit
+      allTraces.push({ skillSlug, trace });
+      const skillTraces = allTraces.filter(t => t.skillSlug === skillSlug);
+      if (skillTraces.length > MAX_TRACES_PER_SKILL) {
+        // Remove oldest traces for this skill to stay within limit
+        const toRemove = skillTraces.length - MAX_TRACES_PER_SKILL;
+        let removed = 0;
+        for (let i = 0; i < allTraces.length && removed < toRemove; i++) {
+          if (allTraces[i].skillSlug === skillSlug) {
+            allTraces.splice(i, 1);
+            removed++;
+            i--; // Adjust index after splice
+          }
+        }
+      }
+
+      await writeFile(filePath, JSON.stringify(allTraces, null, 2), 'utf-8');
+      console.debug(`[SelfEvolution] Persisted trace: ${traceId}`);
+    } catch (err) {
+      console.error(`[SelfEvolution] Failed to persist trace for ${skillSlug}:`, err);
+    }
+  }
+
+  private async loadRecoveryPoints(): Promise<void> {
+    try {
+      await this.ensureDataDir();
+      const filePath = join(this.dataDir, RECOVERY_FILE);
+
+      if (!existsSync(filePath)) {
+        return; // No recovery points yet
+      }
+
+      const raw = await readFile(filePath, 'utf-8');
+      const loaded: Array<[EvolutionId, RecoveryPointer]> = JSON.parse(raw);
+
+      for (const [id, pointer] of loaded) {
+        if (pointer.version === RECOVERY_POINTER_VERSION) {
+          this.recoveryPoints.set(id, pointer);
+        }
+      }
+      console.log(`[SelfEvolution] Loaded ${this.recoveryPoints.size} recovery points`);
+    } catch (err) {
+      console.error('[SelfEvolution] Failed to load recovery points:', err);
+    }
+  }
+
+  private async saveRecoveryPoints(): Promise<void> {
+    try {
+      await this.ensureDataDir();
+      const filePath = join(this.dataDir, RECOVERY_FILE);
+      const serializable = [...this.recoveryPoints.entries()];
+      await writeFile(filePath, JSON.stringify(serializable, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('[SelfEvolution] Failed to save recovery points:', err);
+    }
   }
 
   // ============================================================
@@ -1077,7 +1153,7 @@ Output ONLY the improved Prompt (no JSON, no commentary):`,
   // ============================================================
   // Closed-Loop: Rollback
   // ============================================================
-  
+
   private async performRollback(skillSlug: string): Promise<boolean> {
     // Clean up old backups first
     this.cleanupBackups();
@@ -1087,13 +1163,13 @@ Output ONLY the improved Prompt (no JSON, no commentary):`,
       console.warn(`[SelfEvolution] No backup found for ${skillSlug}, cannot rollback`);
       return false;
     }
-    
+
     const skill = this.skillManager.getSkill(skillSlug);
     if (!skill) {
       console.warn(`[SelfEvolution] Skill not found for rollback: ${skillSlug}`);
       return false;
     }
-    
+
     try {
       // Restore backup content
       await this.skillManager.writeSkillContent(skill, backup.content);
@@ -1105,39 +1181,57 @@ Output ONLY the improved Prompt (no JSON, no commentary):`,
       return false;
     }
   }
-  
+
   // ============================================================
   // Apply Best Candidate with Verification Tracking
   // ============================================================
 
-  applyBestCandidate(result: EvolutionResult): boolean {
+  /**
+   * Apply the best evolution candidate to the skill.
+   * FIX: Actually writes the candidate content to the skill file.
+   */
+  async applyBestCandidate(result: EvolutionResult): Promise<boolean> {
     if (!result.bestCandidate) {
       return false;
     }
-    
+
     const skillSlug = result.target.replace('skill:', '');
     const skill = this.skillManager.getSkill(skillSlug);
-    
+
     if (!skill) {
+      console.error(`[SelfEvolution] Skill not found: ${skillSlug}`);
       return false;
     }
-    
+
     // ============================================================
     // Closed-Loop: Create backup before applying
     // ============================================================
-    (async () => {
-      try {
-        const currentContent = await this.skillManager.readSkillContent(skill);
-        this.backups.set(skillSlug, {
-          data: { content: currentContent, timestamp: Date.now() },
-          timestamp: Date.now(),
-        });
-        console.log(`[SelfEvolution] Backup created for ${skillSlug}`);
-      } catch (err) {
-        console.error(`[SelfEvolution] Backup creation failed for ${skillSlug}:`, err);
+    try {
+      const currentContent = await this.skillManager.readSkillContent(skill);
+      this.backups.set(skillSlug, {
+        data: { content: currentContent, timestamp: Date.now() },
+        timestamp: Date.now(),
+      });
+      console.log(`[SelfEvolution] Backup created for ${skillSlug}`);
+    } catch (err) {
+      console.error(`[SelfEvolution] Backup creation failed for ${skillSlug}:`, err);
+    }
+
+    // ============================================================
+    // FIX: Actually write the best candidate content to the skill
+    // ============================================================
+    try {
+      const writeSuccess = await this.skillManager.writeSkillContent(skill, result.bestCandidate.content);
+      if (!writeSuccess) {
+        console.error(`[SelfEvolution] Failed to write candidate for ${skillSlug}`);
+        return false;
       }
-    })();
-    
+      console.log(`[SelfEvolution] Applied best candidate (score=${result.bestCandidate.score}) to ${skillSlug}`);
+    } catch (err) {
+      console.error(`[SelfEvolution] Write error for ${skillSlug}:`, err);
+      return false;
+    }
+
     // Set up verification tracking
     // Bounded applied candidates (FIFO eviction)
     const appliedKeys = [...this.appliedCandidates.keys()].filter(k => k.startsWith(skillSlug));
@@ -1151,10 +1245,9 @@ Output ONLY the improved Prompt (no JSON, no commentary):`,
       successCount: 0,
       appliedAt: Date.now(),
     });
-    
+
     console.log(`[SelfEvolution] Verification tracking started for ${skillSlug} (need ${VERIFICATION_COUNT} traces)`);
-    
-    // This is handled by commitEvolution in two-phase mode
+
     return true;
   }
 
@@ -1162,7 +1255,7 @@ Output ONLY the improved Prompt (no JSON, no commentary):`,
     options?: Partial<EvolutionOptions>
   ): Promise<Map<string, EvolutionResult>> {
     await this.initialize();
-    
+
     const results = new Map<string, EvolutionResult>();
     const skills = this.skillManager.getSkills();
 
@@ -1177,7 +1270,7 @@ Output ONLY the improved Prompt (no JSON, no commentary):`,
     });
 
     const settled = await Promise.all(promises);
-    
+
     for (const item of settled) {
       if (item) {
         results.set(item.skill, item.result);

@@ -3,6 +3,16 @@
  */
 import { Type } from '@sinclair/typebox';
 import { okResult, errResult } from '../index.js';
+function isResult(val) {
+    return typeof val === 'object' && val !== null && 'ok' in val && val.ok === true;
+}
+function unwrapSkills(val) {
+    if (Array.isArray(val))
+        return val;
+    if (isResult(val))
+        return val.data;
+    return [];
+}
 export function registerSkillTools(api, state) {
     // SkillVersioning Tools
     api.registerTool({
@@ -106,7 +116,27 @@ export function registerSkillTools(api, state) {
         description: 'Rebuild the entire skill index',
         parameters: Type.Object({}),
         async execute(_id, _params) {
-            return errResult('Indexer rebuild not yet implemented - use indexer_index to add skills manually');
+            try {
+                // Discover all skills first (handle both Result and array returns)
+                const discoverResult = await state.skillManager.discover();
+                const skills = unwrapSkills(discoverResult);
+                let indexed = 0;
+                let failed = 0;
+                for (const skill of skills) {
+                    try {
+                        await state.skillIndexer.indexSkill(skill);
+                        indexed++;
+                    }
+                    catch (e) {
+                        failed++;
+                        console.warn(`[ZCrystal] Failed to index skill ${skill.slug}:`, e);
+                    }
+                }
+                return okResult(`Indexer rebuild complete: ${indexed} indexed, ${failed} failed`, { indexed, failed });
+            }
+            catch (err) {
+                return errResult('Indexer rebuild failed: ' + String(err));
+            }
         },
     });
     api.registerTool({

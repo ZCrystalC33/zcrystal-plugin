@@ -52,6 +52,7 @@ import {
   registerSystemTools,
   registerProactiveTools,
 } from './tools/index.js';
+import { registerSignalTools } from './routes/signals.js';
 
 // ============================================================================
 // Plugin State
@@ -164,7 +165,10 @@ export default definePluginEntry({
   
   register(api: OpenClawPluginApi) {
     console.log('[ZCrystal] Initializing with ZCrystal_evo...');
-    
+
+    // P0 Fix: Wrap entire register in try/catch to prevent plugin crash from blocking OpenClaw startup
+    try {
+
     const router = new UnifiedApiRouter();
     const honcho = createHonchoClient({ baseUrl: 'http://localhost:8000', workspace: 'openclaw' });
     const skillManager = createSkillManager(config.paths.skills);
@@ -285,6 +289,7 @@ export default definePluginEntry({
     registerWorkflowTools(api, state);
     registerSystemTools(api, state);
     registerProactiveTools(api, state);
+    registerSignalTools(api, state);
     
     // =====================================================================
     // FTS5 Tools
@@ -448,7 +453,8 @@ export default definePluginEntry({
         if (canExecute) {
           return okResult('Circuit allows execution');
         }
-        return errResult('Circuit breaker is OPEN - operation blocked');
+        // Circuit breaker open is a normal flow control, not an error
+        return okResult('Circuit breaker is OPEN - operation blocked');
       },
     }, { optional: true });
 
@@ -479,7 +485,8 @@ export default definePluginEntry({
         if (allowed) {
           return okResult('Rate limit allows execution');
         }
-        return errResult('Rate limit exceeded');
+        // Rate limit exceeded is normal flow control, not an error
+        return okResult('Rate limit exceeded - operation blocked');
       },
     }, { optional: true });
 
@@ -595,7 +602,10 @@ export default definePluginEntry({
     
     api.registerHook('message:received', async (event: unknown) => {
       if (!state) return;
-      const msg = (event as { context?: { content?: string } })?.context?.content || '';
+      // FIX: Support both { context: { content } } and { content } structures
+      const msg = (event as { context?: { content?: string }; content?: string })?.context?.content
+        || (event as { content?: string })?.content
+        || '';
       if (msg) {
         await state.router.memoryStoreData('L3', 'last_message', msg);
       }
@@ -603,10 +613,20 @@ export default definePluginEntry({
 
     api.registerHook('message:sent', async (event: unknown) => {
       if (!state) return;
-      const content = (event as { content?: string })?.content;
+      // FIX: message:sent event structure mirrors message:received
+      const content = (event as { context?: { content?: string }; content?: string })?.context?.content
+        || (event as { content?: string })?.content
+        || '';
       if (content) await state.router.memoryStoreData('L2', 'last_ai_response', content);
     }, { name: 'zcrystal:msg_sent' });
 
     console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 95');
+  } catch (err) {
+    // P0 Fix: If any constructor throws, log and allow OpenClaw to start without ZCrystal
+    console.error('[ZCrystal] ⚠️ Plugin initialization failed:', err);
+    console.error('[ZCrystal] ZCrystal tools will not be available. OpenClaw will continue starting.');
+    // Clear state to prevent partial initialization
+    state = null;
+  }
   },
 });

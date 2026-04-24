@@ -3,6 +3,30 @@
  */
 import { Type } from '@sinclair/typebox';
 import { okResult, errResult } from '../index.js';
+function isResult(val) {
+    return typeof val === 'object' && val !== null && 'ok' in val && val.ok === true;
+}
+function unwrapSkills(val) {
+    if (Array.isArray(val))
+        return val;
+    if (isResult(val))
+        return val.data;
+    return [];
+}
+function unwrapSkill(val) {
+    if (Array.isArray(val))
+        return val[0];
+    if (isResult(val))
+        return val.data;
+    return val;
+}
+function unwrapString(val) {
+    if (typeof val === 'string')
+        return val;
+    if (isResult(val))
+        return val.data || '';
+    return '';
+}
 export function registerCoreTools(api, state) {
     // zcrystal_evo_health
     api.registerTool({
@@ -52,9 +76,11 @@ export function registerCoreTools(api, state) {
         description: 'List all available skills',
         parameters: Type.Object({}),
         async execute(_id, _params) {
+            // FIX: Use helper type guards instead of inline casting
             const result = await state.skillManager.getSkills();
-            const skills = result.ok ? result.data : [];
-            const text = skills.length === 0 ? 'No skills discovered'
+            const skills = unwrapSkills(result);
+            const text = skills.length === 0
+                ? 'No skills discovered'
                 : skills.map((s) => `- ${s.name} (${s.slug}): ${s.description}`).join('\n');
             return okResult(text, { count: skills.length });
         },
@@ -66,13 +92,16 @@ export function registerCoreTools(api, state) {
         description: 'Read content of a skill',
         parameters: Type.Object({ slug: Type.String() }),
         async execute(_id, params) {
+            // FIX: Use helper type guards instead of inline casting
             const skillResult = await state.skillManager.getSkill(params.slug);
-            if (!skillResult.ok || !skillResult.data)
-                return errResult('Skill not found');
-            const contentResult = await state.skillManager.readContent(skillResult.data);
-            if (!contentResult.ok)
-                return errResult('Failed to read skill');
-            return okResult(contentResult.data, { slug: params.slug });
+            const skill = unwrapSkill(skillResult);
+            if (!skill)
+                return errResult('Skill not found: ' + params.slug);
+            const contentResult = await state.skillManager.readContent(skill);
+            const content = unwrapString(contentResult);
+            if (!content)
+                return errResult('Failed to read skill content');
+            return okResult(content, { slug: params.slug });
         },
     });
     // zcrystal_evolution_status

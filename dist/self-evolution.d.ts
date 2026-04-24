@@ -139,10 +139,16 @@ export declare class SelfEvolutionEngine {
      */
     routeEvolution(candidates: EvolutionCandidate[], skill: Skill): Promise<EvolutionResult>;
     private identifyMutations;
+    private ensureDataDir;
     private persistTrace;
     private loadRecoveryPoints;
+    private saveRecoveryPoints;
     private performRollback;
-    applyBestCandidate(result: EvolutionResult): boolean;
+    /**
+     * Apply the best evolution candidate to the skill.
+     * FIX: Actually writes the candidate content to the skill file.
+     */
+    applyBestCandidate(result: EvolutionResult): Promise<boolean>;
     evolveAllSkills(options?: Partial<EvolutionOptions>): Promise<Map<string, EvolutionResult>>;
     getHistory(): EvolutionResult[];
     getLastEvolution(target: string): EvolutionResult | undefined;

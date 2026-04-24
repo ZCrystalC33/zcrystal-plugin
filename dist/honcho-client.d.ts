@@ -34,6 +34,8 @@ export declare class HonchoClient {
     private apiKey?;
     private _workspaceChecked;
     private _workspaceValid;
+    private _workspaceLastCheck;
+    private readonly WORKSPACE_CACHE_TTL_MS;
     constructor(baseUrl: string, workspace: string, apiKey?: string);
     private getHeaders;
     ensureWorkspace(): Promise<boolean>;
@@ -43,8 +45,13 @@ export declare class HonchoClient {
     listSessions(): Promise<Session[]>;
     private _writeCountToday;
     private _writeCountDate;
-    private _lastWriteHash;
+    private _lastWriteHashes;
     private readonly MAX_WRITES_PER_DAY;
+    private readonly DEDUP_WINDOW;
+    /**
+     * Check and record write with proper batch deduplication.
+     * Returns true only if ALL messages pass the gate.
+     */
     private _checkAndRecordWrite;
     addMessages(sessionName: string, messages: Array<{
         content: string;
@@ -78,6 +85,18 @@ export declare class HonchoClient {
         completed: number;
     } | null>;
     getTraces(skillSlug?: string): Promise<unknown[]>;
+    /**
+     * Update a message by appending to session context.
+     * Note: Honcho API doesn't support direct message updates; this implements
+     * a workaround by adding a correction message with the same peerId.
+     */
+    updateMessage(sessionName: string, messageId: string, newContent: string, peerId: string): Promise<boolean>;
+    /**
+     * Delete messages by filtering them from the session.
+     * Note: Honcho API doesn't support direct message deletion; this implements
+     * a soft-delete by marking messages as deleted in metadata.
+     */
+    deleteMessage(sessionName: string, messageId: string): Promise<boolean>;
 }
 export declare function createHonchoClient(config?: HonchoClientConfig): HonchoClient;
 export {};

@@ -6,6 +6,18 @@ import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import type { PluginState } from '../index.js';
 import { okResult, errResult } from '../index.js';
+import type { Skill } from '@zcrystal/evo';
+
+// Reuse the Result type helpers from core-tools (FIX: Consistent handling across all tool files)
+interface Result<T> { ok: true; data: T }
+function isResult<T>(val: unknown): val is Result<T> {
+  return typeof val === 'object' && val !== null && 'ok' in val && (val as { ok: boolean }).ok === true;
+}
+function unwrapSkills(val: unknown): Skill[] {
+  if (Array.isArray(val)) return val as Skill[];
+  if (isResult(val)) return (val as Result<Skill[]>).data;
+  return [];
+}
 
 export function registerSkillTools(api: OpenClawPluginApi, state: PluginState) {
   // SkillVersioning Tools
@@ -115,7 +127,27 @@ export function registerSkillTools(api: OpenClawPluginApi, state: PluginState) {
     description: 'Rebuild the entire skill index',
     parameters: Type.Object({}),
     async execute(_id, _params) {
-      return errResult('Indexer rebuild not yet implemented - use indexer_index to add skills manually');
+      try {
+        // Discover all skills first (handle both Result and array returns)
+        const discoverResult = await state.skillManager.discover();
+        const skills = unwrapSkills(discoverResult);
+        let indexed = 0;
+        let failed = 0;
+
+        for (const skill of skills) {
+          try {
+            await state.skillIndexer.indexSkill(skill);
+            indexed++;
+          } catch (e) {
+            failed++;
+            console.warn(`[ZCrystal] Failed to index skill ${skill.slug}:`, e);
+          }
+        }
+
+        return okResult(`Indexer rebuild complete: ${indexed} indexed, ${failed} failed`, { indexed, failed });
+      } catch (err) {
+        return errResult('Indexer rebuild failed: ' + String(err));
+      }
     },
   });
 

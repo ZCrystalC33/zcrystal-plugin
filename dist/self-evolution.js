@@ -26,6 +26,8 @@
  */
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 // ============================================================
 // Constants (Magic Number Replacement)
 // ============================================================
@@ -49,6 +51,10 @@ const VERIFICATION_COUNT = 20; // Verify with 20 traces before confirming
 const DEGRADATION_THRESHOLD = 0.5; // Rollback if verified success rate < 50%
 const SCHEDULER_INTERVAL_MS = 60 * 60 * 1000; // 1 hour between scheduled checks
 const MIN_TRACES_FOR_ANALYSIS = 10; // Min traces to analyze before triggering
+// Persistence constants
+const TRACES_FILE = 'traces.json';
+const RECOVERY_FILE = 'recovery.json';
+const MAX_TRACES_PER_SKILL = 100;
 function createEvolutionId(type, name) {
     return `${type}:${name}`;
 }
@@ -825,15 +831,80 @@ Output ONLY the improved Prompt (no JSON, no commentary):`, 'quick');
     // ============================================================
     // Persistence (Memory Persistence - Pattern 1)
     // ============================================================
-    async persistTrace(skillSlug, trace) {
-        // Placeholder for disk persistence
-        // In production, this would write to a JSON file or SQLite
-        const traceId = createTraceId(skillSlug, trace.timestamp);
-        console.debug(`[SelfEvolution] Persisting trace: ${traceId}`);
+    async ensureDataDir() {
+        if (!existsSync(this.dataDir)) {
+            await mkdir(this.dataDir, { recursive: true });
+        }
     }
-    loadRecoveryPoints() {
-        // Placeholder for loading recovery points from disk
-        // In production, this would read from a recovery file
+    async persistTrace(skillSlug, trace) {
+        try {
+            await this.ensureDataDir();
+            const traceId = createTraceId(skillSlug, trace.timestamp);
+            const filePath = join(this.dataDir, TRACES_FILE);
+            // Load existing traces
+            let allTraces = [];
+            try {
+                if (existsSync(filePath)) {
+                    const raw = await readFile(filePath, 'utf-8');
+                    allTraces = JSON.parse(raw);
+                }
+            }
+            catch {
+                // File doesn't exist or is corrupted, start fresh
+                allTraces = [];
+            }
+            // Add new trace and enforce per-skill limit
+            allTraces.push({ skillSlug, trace });
+            const skillTraces = allTraces.filter(t => t.skillSlug === skillSlug);
+            if (skillTraces.length > MAX_TRACES_PER_SKILL) {
+                // Remove oldest traces for this skill to stay within limit
+                const toRemove = skillTraces.length - MAX_TRACES_PER_SKILL;
+                let removed = 0;
+                for (let i = 0; i < allTraces.length && removed < toRemove; i++) {
+                    if (allTraces[i].skillSlug === skillSlug) {
+                        allTraces.splice(i, 1);
+                        removed++;
+                        i--; // Adjust index after splice
+                    }
+                }
+            }
+            await writeFile(filePath, JSON.stringify(allTraces, null, 2), 'utf-8');
+            console.debug(`[SelfEvolution] Persisted trace: ${traceId}`);
+        }
+        catch (err) {
+            console.error(`[SelfEvolution] Failed to persist trace for ${skillSlug}:`, err);
+        }
+    }
+    async loadRecoveryPoints() {
+        try {
+            await this.ensureDataDir();
+            const filePath = join(this.dataDir, RECOVERY_FILE);
+            if (!existsSync(filePath)) {
+                return; // No recovery points yet
+            }
+            const raw = await readFile(filePath, 'utf-8');
+            const loaded = JSON.parse(raw);
+            for (const [id, pointer] of loaded) {
+                if (pointer.version === RECOVERY_POINTER_VERSION) {
+                    this.recoveryPoints.set(id, pointer);
+                }
+            }
+            console.log(`[SelfEvolution] Loaded ${this.recoveryPoints.size} recovery points`);
+        }
+        catch (err) {
+            console.error('[SelfEvolution] Failed to load recovery points:', err);
+        }
+    }
+    async saveRecoveryPoints() {
+        try {
+            await this.ensureDataDir();
+            const filePath = join(this.dataDir, RECOVERY_FILE);
+            const serializable = [...this.recoveryPoints.entries()];
+            await writeFile(filePath, JSON.stringify(serializable, null, 2), 'utf-8');
+        }
+        catch (err) {
+            console.error('[SelfEvolution] Failed to save recovery points:', err);
+        }
     }
     // ============================================================
     // Public API
@@ -869,31 +940,49 @@ Output ONLY the improved Prompt (no JSON, no commentary):`, 'quick');
     // ============================================================
     // Apply Best Candidate with Verification Tracking
     // ============================================================
-    applyBestCandidate(result) {
+    /**
+     * Apply the best evolution candidate to the skill.
+     * FIX: Actually writes the candidate content to the skill file.
+     */
+    async applyBestCandidate(result) {
         if (!result.bestCandidate) {
             return false;
         }
         const skillSlug = result.target.replace('skill:', '');
         const skill = this.skillManager.getSkill(skillSlug);
         if (!skill) {
+            console.error(`[SelfEvolution] Skill not found: ${skillSlug}`);
             return false;
         }
         // ============================================================
         // Closed-Loop: Create backup before applying
         // ============================================================
-        (async () => {
-            try {
-                const currentContent = await this.skillManager.readSkillContent(skill);
-                this.backups.set(skillSlug, {
-                    data: { content: currentContent, timestamp: Date.now() },
-                    timestamp: Date.now(),
-                });
-                console.log(`[SelfEvolution] Backup created for ${skillSlug}`);
+        try {
+            const currentContent = await this.skillManager.readSkillContent(skill);
+            this.backups.set(skillSlug, {
+                data: { content: currentContent, timestamp: Date.now() },
+                timestamp: Date.now(),
+            });
+            console.log(`[SelfEvolution] Backup created for ${skillSlug}`);
+        }
+        catch (err) {
+            console.error(`[SelfEvolution] Backup creation failed for ${skillSlug}:`, err);
+        }
+        // ============================================================
+        // FIX: Actually write the best candidate content to the skill
+        // ============================================================
+        try {
+            const writeSuccess = await this.skillManager.writeSkillContent(skill, result.bestCandidate.content);
+            if (!writeSuccess) {
+                console.error(`[SelfEvolution] Failed to write candidate for ${skillSlug}`);
+                return false;
             }
-            catch (err) {
-                console.error(`[SelfEvolution] Backup creation failed for ${skillSlug}:`, err);
-            }
-        })();
+            console.log(`[SelfEvolution] Applied best candidate (score=${result.bestCandidate.score}) to ${skillSlug}`);
+        }
+        catch (err) {
+            console.error(`[SelfEvolution] Write error for ${skillSlug}:`, err);
+            return false;
+        }
         // Set up verification tracking
         // Bounded applied candidates (FIFO eviction)
         const appliedKeys = [...this.appliedCandidates.keys()].filter(k => k.startsWith(skillSlug));
@@ -908,7 +997,6 @@ Output ONLY the improved Prompt (no JSON, no commentary):`, 'quick');
             appliedAt: Date.now(),
         });
         console.log(`[SelfEvolution] Verification tracking started for ${skillSlug} (need ${VERIFICATION_COUNT} traces)`);
-        // This is handled by commitEvolution in two-phase mode
         return true;
     }
     async evolveAllSkills(options) {

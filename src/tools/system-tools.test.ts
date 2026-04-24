@@ -143,11 +143,13 @@ describe('System Tools', () => {
     expect(result.content[0].text).toContain('totalReviews');
   });
 
-  it('should execute zcrystal_hook_register returns error', async () => {
+  it('should execute zcrystal_hook_register successfully', async () => {
     const { registerSystemTools } = await import('./system-tools.js');
     registerSystemTools(mockApi, mockState);
     const tool = mockApi.getTools().find((t: any) => t.name === 'zcrystal_hook_register');
     const result = await tool.execute('123', { name: 'test', handler: 'test' });
-    expect(result.isError).toBe(true);
+    // FIX: Now properly implemented - returns okResult with hook registration confirmation
+    expect(result.isError || false).toBe(false);
+    expect(result.content[0].text).toContain('Hook registered');
   });
 });

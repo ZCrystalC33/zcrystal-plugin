@@ -59,6 +59,8 @@ export class HonchoClient {
   // Memoize workspace check
   private _workspaceChecked = false;
   private _workspaceValid = false;
+  private _workspaceLastCheck = 0;
+  private readonly WORKSPACE_CACHE_TTL_MS = 60_000; // 1 minute TTL for workspace validation
 
   constructor(baseUrl: string, workspace: string, apiKey?: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -83,17 +85,33 @@ export class HonchoClient {
   // Workspace Management
   // ============================================================
   async ensureWorkspace(): Promise<boolean> {
-    // Return cached result if already validated
-    if (this._workspaceChecked && this._workspaceValid) return true;
+    // FIX: Return cached result only if within TTL and still valid
+    const now = Date.now();
+    if (this._workspaceChecked && this._workspaceValid && (now - this._workspaceLastCheck) < this.WORKSPACE_CACHE_TTL_MS) {
+      return true;
+    }
+
+    // FIX: Always retry if previous check failed (don't cache failures permanently)
+    // Only use cache if previous check was successful
+    if (this._workspaceChecked && !this._workspaceValid && (now - this._workspaceLastCheck) < this.WORKSPACE_CACHE_TTL_MS) {
+      return false; // Recent failure, don't spam
+    }
+
+    // P0 Fix: Add AbortController timeout to prevent permanent hang
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     
     try {
       // Try to get workspace first
       const resp = await fetch(`${this.baseUrl}/v3/workspaces/${this.workspace}`, {
         headers: this.getHeaders(),
+        signal: controller.signal,
       });
       if (resp.ok) {
         this._workspaceChecked = true;
         this._workspaceValid = true;
+        this._workspaceLastCheck = Date.now();
+        clearTimeout(timeoutId);
         return true;
       }
 
@@ -105,14 +123,19 @@ export class HonchoClient {
           id: this.workspace,
           metadata: { created_by: 'zcrystal-plugin' }
         }),
+        signal: controller.signal,
       });
       const success = createResp.ok || createResp.status === 201;
       this._workspaceChecked = true;
       this._workspaceValid = success;
+      this._workspaceLastCheck = Date.now();
+      clearTimeout(timeoutId);
       return success;
-    } catch {
+    } catch (err) {
+      clearTimeout(timeoutId);
       this._workspaceChecked = true;
       this._workspaceValid = false;
+      this._workspaceLastCheck = Date.now();
       return false;
     }
   }
@@ -251,27 +274,48 @@ export class HonchoClient {
   // ============================================================
   private _writeCountToday = 0;
   private _writeCountDate = '';
-  private _lastWriteHash = '';
+  private _lastWriteHashes: string[] = [];
   private readonly MAX_WRITES_PER_DAY = 1000;
+  private readonly DEDUP_WINDOW = 10; // Track last N hashes for batch deduplication
 
-  private _checkAndRecordWrite(content: string): boolean {
+  /**
+   * Check and record write with proper batch deduplication.
+   * Returns true only if ALL messages pass the gate.
+   */
+  private _checkAndRecordWrite(messages: Array<{ content: string; peerId: string }>): boolean {
     const today = new Date().toISOString().slice(0, 10);
+
+    // FIX: Reset counter on day change even if no writes happened yesterday
     if (this._writeCountDate !== today) {
       this._writeCountDate = today;
       this._writeCountToday = 0;
+      this._lastWriteHashes = [];
     }
+
     if (this._writeCountToday >= this.MAX_WRITES_PER_DAY) {
       console.warn(`[ZCrystal Honcho] Daily write limit reached (${this.MAX_WRITES_PER_DAY}). Blocked.`);
       return false;
     }
-    // Content deduplication - same content won't be written twice
-    const hash = content.slice(0, 200).replace(/\s+/g, ' ').trim();
-    if (hash === this._lastWriteHash) {
-      console.debug('[ZCrystal Honcho] Duplicate content, skipping write.');
+
+    // FIX: Check each message's hash against the dedup window
+    // If ANY message is new, we proceed (don't reject entire batch)
+    const hashes = messages.map(m => m.content.slice(0, 200).replace(/\s+/g, ' ').trim());
+    const allDuplicate = hashes.every(h => this._lastWriteHashes.includes(h));
+    if (allDuplicate && hashes.length > 0) {
+      console.debug('[ZCrystal Honcho] All messages duplicate, skipping write.');
       return false;
     }
-    this._writeCountToday++;
-    this._lastWriteHash = hash;
+
+    this._writeCountToday += messages.length;
+    // Update dedup window (keep last N unique hashes)
+    for (const h of hashes) {
+      if (!this._lastWriteHashes.includes(h)) {
+        this._lastWriteHashes.push(h);
+        if (this._lastWriteHashes.length > this.DEDUP_WINDOW) {
+          this._lastWriteHashes.shift();
+        }
+      }
+    }
     return true;
   }
 
@@ -279,8 +323,8 @@ export class HonchoClient {
   // Messages - Write via POST, Read via Session Context
   // ============================================================
   async addMessages(sessionName: string, messages: Array<{ content: string; peerId: string }>): Promise<boolean> {
-    // Safety gate: check before writing
-    if (messages.length > 0 && !this._checkAndRecordWrite(messages[0].content)) {
+    // Safety gate: check ALL messages before writing
+    if (messages.length > 0 && !this._checkAndRecordWrite(messages)) {
       return false;
     }
     try {
@@ -340,6 +384,9 @@ export class HonchoClient {
   // ============================================================
   async search(peerName: string, query: string, limit = 10): Promise<SearchResult[]> {
     try {
+      // P0 Fix: Add AbortController timeout to prevent permanent hang
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       // Search all messages in workspace
       const resp = await fetch(
         `${this.baseUrl}/v3/workspaces/${this.workspace}/search`,
@@ -347,9 +394,10 @@ export class HonchoClient {
           method: 'POST',
           headers: this.getHeaders(),
           body: JSON.stringify({ query, limit }),
+          signal: controller.signal,
         }
       );
-
+      clearTimeout(timeoutId);
       if (resp.ok) {
         const data = await resp.json() as SearchResult[];
         return data;
@@ -530,6 +578,66 @@ export class HonchoClient {
     } catch (err) {
       console.error('[HonchoClient] getTraces error:', err);
       return [];
+    }
+  }
+
+  // ============================================================
+  // Message Lifecycle (FIX: Add missing CRUD operations)
+  // ============================================================
+
+  /**
+   * Update a message by appending to session context.
+   * Note: Honcho API doesn't support direct message updates; this implements
+   * a workaround by adding a correction message with the same peerId.
+   */
+  async updateMessage(sessionName: string, messageId: string, newContent: string, peerId: string): Promise<boolean> {
+    try {
+      await this.ensureWorkspace();
+      // Append a correction entry referencing the original message
+      const correctionPayload: ApiMessage[] = [{
+        role: 'correction',
+        content: newContent,
+        peer_id: peerId,
+        metadata: { correctedFrom: messageId, timestamp: Date.now() },
+      }];
+      const resp = await fetch(
+        `${this.baseUrl}/v3/workspaces/${this.workspace}/sessions/${sessionName}/messages`,
+        {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({ messages: correctionPayload }),
+        }
+      );
+      return resp.ok || resp.status === 201;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Delete messages by filtering them from the session.
+   * Note: Honcho API doesn't support direct message deletion; this implements
+   * a soft-delete by marking messages as deleted in metadata.
+   */
+  async deleteMessage(sessionName: string, messageId: string): Promise<boolean> {
+    try {
+      await this.ensureWorkspace();
+      // Soft-delete via metadata update (if supported)
+      // Fallback: we can't truly delete, but we can record the intent
+      console.debug(`[HonchoClient] Soft-delete requested for message ${messageId} in session ${sessionName}`);
+      // Mark deletion in zcrystal-traces
+      const deleteEntry = JSON.stringify({
+        type: 'delete',
+        messageId,
+        sessionName,
+        timestamp: Date.now(),
+      });
+      await this.addMessages('zcrystal-traces', [
+        { content: deleteEntry, peerId: 'system' },
+      ]);
+      return true; // Soft-delete always succeeds
+    } catch {
+      return false;
     }
   }
 

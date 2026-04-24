@@ -111,6 +111,20 @@ export interface Mutation {
     mutated: string;
     rationale: string;
 }
+/**
+ * Memory Layer Key Schema (FIX: Documented to prevent key collisions)
+ *
+ * L1 (Hot):    hot:{timestamp}          - Short-lived transient data
+ * L2 (Session): session:{key}            - Current session state
+ * L3 (User):   user:{key}               - Long-term user data
+ *              correction:{timestamp}    - Corrections log
+ *              pattern:{name}           - Learned patterns
+ * L4 (Shared): shared:{key}             - Cross-session shared data
+ * L5 (Archive):archive:{key}            - Archived/promoted memories
+ *
+ * Reserved prefixes (do not use):
+ *   - proactive:, action:, session:current, hot:latest
+ */
 export interface MemoryEntry {
     id: string;
     content: string;

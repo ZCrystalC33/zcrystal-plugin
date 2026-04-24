@@ -1,9 +1,15 @@
 /**
- * FTS5 Bridge - Direct import to bypass MCP stdio issues
- * 
- * NOTE: Direct Python import is not yet implemented.
- * The plugin uses MCP HTTP fallback via config.fts5.mcpUrl
- * This bridge is a placeholder for future direct import support.
+ * FTS5 Bridge - HTTP-based FTS5 search integration
+ *
+ * Architecture:
+ * - Primary: HTTP MCP client (JSON-RPC 2.0 over HTTP)
+ * - Fallback: Returns empty results with clear error when server unavailable
+ *
+ * Limitation: Direct Python import is not implemented.
+ * The MCP HTTP transport is stable and used as the primary mechanism.
+ *
+ * Server requirement: FTS5 MCP HTTP server must be running on config.fts5.mcpUrl
+ * (default: http://localhost:18795/mcp)
  */
 
 import { config } from './config.js';
@@ -23,11 +29,51 @@ export interface FTS5Module {
   search: (query: string, limit?: number) => Promise<FTS5SearchResult[]>;
   summarize: (query: string, limit?: number) => Promise<string>;
   get_stats: () => Promise<{ total: number; last_updated: string }>;
+  isAvailable: () => Promise<boolean>;
 }
 
-// HTTP-based FTS5 client (used as fallback when direct import unavailable)
-export async function fts5HttpSearch(query: string, limit = 20): Promise<FTS5SearchResult[]> {
+// FIX: Add timeout to prevent hanging on unavailable server
+const FTS5_TIMEOUT_MS = 10_000;
+
+// FIX: Health check to determine if FTS5 server is available
+let _serverAvailable: boolean | null = null;
+let _lastHealthCheck = 0;
+const HEALTH_CHECK_TTL_MS = 60_000; // 1 minute cache
+
+export async function fts5IsAvailable(): Promise<boolean> {
+  const now = Date.now();
+  if (_serverAvailable !== null && (now - _lastHealthCheck) < HEALTH_CHECK_TTL_MS) {
+    return _serverAvailable;
+  }
+
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const resp = await fetch(FTS5_MCP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', params: {}, id: 0 }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    _serverAvailable = resp.ok;
+    _lastHealthCheck = now;
+    return _serverAvailable;
+  } catch {
+    _serverAvailable = false;
+    _lastHealthCheck = now;
+    return false;
+  }
+}
+
+// HTTP-based FTS5 client
+export async function fts5HttpSearch(query: string, limit = 20): Promise<FTS5SearchResult[]> {
+  // FIX: Invalidate health cache on each search attempt (transient failures)
+  _serverAvailable = null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FTS5_TIMEOUT_MS);
     const response = await fetch(FTS5_MCP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -36,11 +82,12 @@ export async function fts5HttpSearch(query: string, limit = 20): Promise<FTS5Sea
         method: 'tools/call',
         params: { name: 'fts5_search', arguments: { query, limit } },
         id: 2
-      })
+      }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     const data = await response.json() as { result?: { content?: Array<{ text: string }> } };
     if (data.result?.content?.[0]?.text) {
-      // Parse the JSON text result
       try {
         return JSON.parse(data.result.content[0].text);
       } catch {
@@ -55,7 +102,11 @@ export async function fts5HttpSearch(query: string, limit = 20): Promise<FTS5Sea
 }
 
 export async function fts5HttpStats(): Promise<{ total: number; last_updated: string }> {
+  _serverAvailable = null;
+
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FTS5_TIMEOUT_MS);
     const response = await fetch(FTS5_MCP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -64,8 +115,10 @@ export async function fts5HttpStats(): Promise<{ total: number; last_updated: st
         method: 'tools/call',
         params: { name: 'fts5_stats', arguments: {} },
         id: 3
-      })
+      }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     const data = await response.json() as { result?: { content?: Array<{ text: string }> } };
     if (data.result?.content?.[0]?.text) {
       try {
@@ -81,13 +134,14 @@ export async function fts5HttpStats(): Promise<{ total: number; last_updated: st
   }
 }
 
-// Re-export for compatibility
-export const fts5Bridge = {
+// Re-export for compatibility with existing consumers
+export const fts5Bridge: FTS5Module = {
   search: fts5HttpSearch,
   summarize: async (query: string, limit = 5) => {
     const results = await fts5HttpSearch(query, limit);
     if (results.length === 0) return 'No results found';
     return results.map(r => r.content).join('\n---\n');
   },
-  get_stats: fts5HttpStats
+  get_stats: fts5HttpStats,
+  isAvailable: fts5IsAvailable,
 };

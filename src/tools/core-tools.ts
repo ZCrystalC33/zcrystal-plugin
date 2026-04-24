@@ -9,6 +9,34 @@ import { okResult, errResult } from '../index.js';
 import type { Skill } from '@zcrystal/evo';
 import type { SearchResult } from '../types.js';
 
+// ============================================================
+// Type Helpers (FIX: Replace messy inline casting with helpers)
+// ============================================================
+
+interface Result<T> { ok: true; data: T }
+
+function isResult<T>(val: T | { ok: true; data: T } | unknown): val is { ok: true; data: T } {
+  return typeof val === 'object' && val !== null && 'ok' in val && (val as { ok: boolean }).ok === true;
+}
+
+function unwrapSkills(val: unknown): Skill[] {
+  if (Array.isArray(val)) return val as Skill[];
+  if (isResult(val)) return (val as Result<Skill[]>).data;
+  return [];
+}
+
+function unwrapSkill(val: unknown): Skill | undefined {
+  if (Array.isArray(val)) return val[0] as Skill;
+  if (isResult(val)) return (val as Result<Skill>).data;
+  return val as Skill | undefined;
+}
+
+function unwrapString(val: unknown): string {
+  if (typeof val === 'string') return val;
+  if (isResult(val)) return (val as Result<string>).data || '';
+  return '';
+}
+
 export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
   // zcrystal_evo_health
   api.registerTool({
@@ -59,9 +87,11 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
     description: 'List all available skills',
     parameters: Type.Object({}),
     async execute(_id, _params) {
+      // FIX: Use helper type guards instead of inline casting
       const result = await state.skillManager.getSkills();
-      const skills = result.ok ? result.data : [];
-      const text = skills.length === 0 ? 'No skills discovered' 
+      const skills = unwrapSkills(result);
+      const text = skills.length === 0
+        ? 'No skills discovered'
         : skills.map((s: Skill) => `- ${s.name} (${s.slug}): ${s.description}`).join('\n');
       return okResult(text, { count: skills.length });
     },
@@ -74,11 +104,14 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
     description: 'Read content of a skill',
     parameters: Type.Object({ slug: Type.String() }),
     async execute(_id, params) {
+      // FIX: Use helper type guards instead of inline casting
       const skillResult = await state.skillManager.getSkill(params.slug);
-      if (!skillResult.ok || !skillResult.data) return errResult('Skill not found');
-      const contentResult = await state.skillManager.readContent(skillResult.data);
-      if (!contentResult.ok) return errResult('Failed to read skill');
-      return okResult(contentResult.data, { slug: params.slug });
+      const skill = unwrapSkill(skillResult);
+      if (!skill) return errResult('Skill not found: ' + params.slug);
+      const contentResult = await state.skillManager.readContent(skill);
+      const content = unwrapString(contentResult);
+      if (!content) return errResult('Failed to read skill content');
+      return okResult(content, { slug: params.slug });
     },
   });
 

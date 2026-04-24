@@ -344,11 +344,15 @@ export class SkillManager {
 // Factory
 // ============================================================
 
-export function createSkillManager(paths?: string[]): SkillManager {
+/**
+ * Factory for local SkillManager (distinct from @zcrystal/evo's createSkillManager).
+ * FIX: Renamed to avoid naming conflict with @zcrystal/evo export.
+ */
+export function createLocalSkillManager(paths?: string[]): SkillManager {
   const defaultPaths = [
     '~/.openclaw/skills',
     '~/.hermes/skills',
   ];
-  
+
   return new SkillManager(paths || defaultPaths);
 }

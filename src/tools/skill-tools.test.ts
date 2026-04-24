@@ -15,6 +15,7 @@ const createMockState = () => ({
     rollback: vi.fn().mockResolvedValue({ success: true }),
   },
   skillManager: {
+    discover: vi.fn().mockResolvedValue({ ok: true, data: [{ id: 'test', slug: 'test', name: 'Test', version: '1.0.0', description: 'Test skill', path: '/test', content: 'content' }] }),
     getSkill: vi.fn().mockResolvedValue({ ok: true, data: { id: 'test', slug: 'test', name: 'Test', version: '1.0.0', description: 'Test skill', path: '/test', content: 'content' } }),
   },
   skillIndexer: {
@@ -171,15 +172,16 @@ describe('Skill Tools', () => {
     expect(result.content[0].text).toContain('totalVersions');
   });
 
-  it('should execute zcrystal_indexer_rebuild with error message', async () => {
+  it('should execute zcrystal_indexer_rebuild with success', async () => {
     const { registerSkillTools } = await import('./skill-tools.js');
     registerSkillTools(mockApi, mockState);
-    
+
     const tool = mockApi.getTools().find(t => t.name === 'zcrystal_indexer_rebuild');
     const result = await tool.execute('123', {});
-    
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('not yet implemented');
+
+    // FIX: Now properly implemented - okResult doesn't set isError, so check it's falsy
+    expect(result.isError || false).toBe(false);
+    expect(result.content[0].text).toContain('Indexer rebuild complete');
   });
 
   it('should count 15 skill tools', async () => {

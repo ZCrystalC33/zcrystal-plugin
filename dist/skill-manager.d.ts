@@ -84,5 +84,9 @@ export declare class SkillManager {
      */
     reload(): Promise<Skill[]>;
 }
-export declare function createSkillManager(paths?: string[]): SkillManager;
+/**
+ * Factory for local SkillManager (distinct from @zcrystal/evo's createSkillManager).
+ * FIX: Renamed to avoid naming conflict with @zcrystal/evo export.
+ */
+export declare function createLocalSkillManager(paths?: string[]): SkillManager;
 //# sourceMappingURL=skill-manager.d.ts.map
