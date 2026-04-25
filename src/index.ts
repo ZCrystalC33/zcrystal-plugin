@@ -690,67 +690,6 @@ export default definePluginEntry({
       }
     }, { name: 'zcrystal:msg_sent' });
 
-    // =====================================================================
-    // Auto-Context Recall (before_prompt_build hook)
-    // =====================================================================
-    // Automatically inject FTS5 search results into context when relevant
-    // Pattern: Before each prompt build, search FTS5 for recent task context
-    // This makes "失憶復原" automatic - no manual zcrystal_search needed
-
-    api.registerHook('before_prompt_build', async (event: unknown) => {
-      if (!state) return;
-      // Extract current user message for context search
-      const userMsg = (event as { context?: { content?: string }; content?: string })?.context?.content
-        || (event as { content?: string })?.content
-        || '';
-      if (!userMsg || userMsg.length < 10) return; // Skip very short messages
-
-      // Check if message suggests memory gap (keywords indicating need for recall)
-      const MEMORY_GAP_TRIGGERS = [
-        '之前', '上次', '延續', '繼續', '之前的工作',
-        '任務', '進度', '做得如何', '狀態', '確認',
-        '忘記', '不記得', '記得', '延續之前',
-        '之前做', '之前說', '上次說', '繼續上次的'
-      ];
-      const triggersLower = MEMORY_GAP_TRIGGERS.map(t => t.toLowerCase());
-      const msgLower = userMsg.toLowerCase();
-      const triggersFound = triggersLower.filter(t => msgLower.includes(t));
-
-      if (triggersFound.length === 0) return; // No memory gap signals
-
-      // Extract key search terms from message
-      const words = userMsg.split(/[\s,.，。!?]+/).filter(w => w.length > 2);
-      const searchTerms = words.slice(-6).join(' ') || userMsg.slice(-50);
-
-      // Fire-and-forget FTS5 search for context injection
-      const { spawn } = await import('node:child_process');
-      const searchScript = `
-import sys
-sys.path.insert(0, '/home/snow/.openclaw')
-from skills.fts5 import search
-results = search(${JSON.stringify(searchTerms)}, limit=3)
-if results:
-    context = '\\n[YOROZUMI MEMORY RECALL] Previous relevant context:\\n'
-    for r in results[:3]:
-        context += f"- [{r['sender']}] {r['content'][:200]}...\\n"
-    print(context)
-else:
-    print('')
-`;
-      try {
-        spawn('python3', ['-c', searchScript], {
-          detached: true,
-          stdio: 'ignore'
-        });
-        // Note: Results go to stdout, hook doesn't wait
-        // For full integration, would need to pipe results back to prompt
-        // Current: Just logs to console for debugging
-        console.log(`[ZCrystal:memory-recall] triggered by "${triggersFound.join(', ')}" search="${searchTerms.slice(0,30)}"`);
-      } catch (err) {
-        // Best-effort: don't fail the prompt build
-      }
-    }, { name: 'zcrystal:auto_context_recall' });
-
     console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 95');
   } catch (err) {
     // P0 Fix: If any constructor throws, log and allow OpenClaw to start without ZCrystal
