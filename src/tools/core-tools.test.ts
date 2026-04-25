@@ -122,10 +122,11 @@ describe('Core Tools', () => {
     expect(result.content[0].text).toContain('No skills');
   });
 
-  it('should count 8 core tools', async () => {
+  it('should count 10 core tools (including progressive disclosure)', async () => {
     const { registerCoreTools } = await import('./core-tools.js');
     registerCoreTools(mockApi, mockState);
     
-    expect(mockApi.getTools().length).toBe(8);
+    expect(mockApi.getTools().length).toBe(10);
   });
+
 });

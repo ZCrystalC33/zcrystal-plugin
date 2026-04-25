@@ -177,4 +177,50 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
       return okResult('Trace recorded', { skillSlug: params.skillSlug });
     },
   }, { optional: true });
+
+  // ============================================================
+  // Progressive Disclosure Tools (Claude-Mem inspired)
+  // ============================================================
+
+  // Layer 1: Memory index with token cost visibility
+  api.registerTool({
+    name: 'zcrystal_memory_index',
+    label: 'ZCrystal Memory Index',
+    description: 'Get lightweight index of memory entries (metadata only, ~50 tokens per entry). Use this first to find relevant entries before fetching full content.',
+    parameters: Type.Object({
+      query: Type.String(),
+      limit: Type.Optional(Type.Number()),
+    }),
+    async execute(_id, params) {
+      const limit = params.limit || 20;
+      try {
+        const { getMemoryIndex, formatMemoryIndexTable } = await import('../memory/progressive.js');
+        const entries = await getMemoryIndex(params.query, limit);
+        const table = formatMemoryIndexTable(entries);
+        return okResult(table, { count: entries.length, totalTokens: entries.reduce((s, e) => s + e.tokenEstimate, 0) });
+      } catch (err) {
+        return errResult('Memory index failed: ' + String(err));
+      }
+    },
+  }, { optional: true });
+
+  // Layer 3: Fetch full observation by ID
+  api.registerTool({
+    name: 'zcrystal_memory_get',
+    label: 'ZCrystal Memory Get',
+    description: 'Get full memory entry content by ID. Use after memory_index to fetch details.',
+    parameters: Type.Object({
+      id: Type.Number(),
+    }),
+    async execute(_id, params) {
+      try {
+        const { getMemoryEntryById } = await import('../memory/progressive.js');
+        const content = await getMemoryEntryById(params.id);
+        if (content === null) return errResult(`Memory entry #${params.id} not found`);
+        return okResult(content, { id: params.id, tokens: Math.ceil(content.length / 4) });
+      } catch (err) {
+        return errResult('Memory get failed: ' + String(err));
+      }
+    },
+  }, { optional: true });
 }

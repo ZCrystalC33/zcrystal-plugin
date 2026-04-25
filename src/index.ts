@@ -13,6 +13,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { config } from './config.js';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
+import { stripPrivateTags } from './utils/privacy-filter.js';
 
 const FTS5_REALTIME_INDEXER = join(config.paths.home, '.openclaw', 'skills', 'fts5', 'realtime_index.py');
 
@@ -644,7 +645,8 @@ export default definePluginEntry({
           const msgData = JSON.stringify({
             sender: 'user',
             sender_label: rawEvent.sender_label || 'user',
-            content: msg,
+            // FIX: Strip <private> tags before indexing (Privacy Tags feature)
+            content: stripPrivateTags(msg),
             channel: rawEvent.channel || 'telegram',
             session_key: rawEvent.session_key || '',
             message_id: rawEvent.message_id || '',
@@ -672,7 +674,8 @@ export default definePluginEntry({
           const msgData = JSON.stringify({
             sender: 'assistant',
             sender_label: rawEvent.sender_label || 'assistant',
-            content,
+            // FIX: Strip <private> tags before indexing (Privacy Tags feature)
+            content: stripPrivateTags(content),
             channel: rawEvent.channel || 'telegram',
             session_key: rawEvent.session_key || '',
             message_id: rawEvent.message_id || '',

@@ -2,14 +2,10 @@
  * FTS5 Bridge - HTTP-based FTS5 search integration
  *
  * Architecture:
- * - Primary: HTTP MCP client (JSON-RPC 2.0 over HTTP)
- * - Fallback: Returns empty results with clear error when server unavailable
+ * - Primary: Direct Python subprocess (bypasses MCP HTTP dependency)
+ * - Features: Privacy filter, token cost visibility, progressive disclosure
  *
- * Limitation: Direct Python import is not implemented.
- * The MCP HTTP transport is stable and used as the primary mechanism.
- *
- * Server requirement: FTS5 MCP HTTP server must be running on config.fts5.mcpUrl
- * (default: http://localhost:18795/mcp)
+ * Integration: privacy-filter.ts strips <private> tags before indexing
  */
 import { config } from './config.js';
 // FTS5 HTTP MCP URL - used by the plugin directly in index.ts
