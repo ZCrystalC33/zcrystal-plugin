@@ -65,6 +65,7 @@ export declare class SelfEvolutionEngine {
     private backups;
     private readonly BACKUP_TTL_MS;
     private _backupDir?;
+    private learningPersistence?;
     private schedulerInterval?;
     constructor(skillManager: SkillManager, config?: Partial<EvolutionConfig>, honcho?: HonchoClient);
     /**
@@ -108,6 +109,7 @@ export declare class SelfEvolutionEngine {
     evolveSkill(skill: Skill, options?: Partial<EvolutionOptions>): Promise<EvolutionResult>;
     /**
      * Generate mutation candidates
+     * Uses learning hints to guide mutations toward successful patterns
      */
     private generateCandidates;
     /**

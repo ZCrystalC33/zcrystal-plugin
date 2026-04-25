@@ -25,6 +25,7 @@
  * 13. Codex/AI Coding - Context-first design
  */
 import { FeedbackStore } from './feedback-store.js';
+import { EvolutionLearningPersistence } from './memory/evolution-learning.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -136,6 +137,8 @@ export class SelfEvolutionEngine {
     backups = new Map();
     BACKUP_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
     _backupDir;
+    // Learning persistence (Memory Persistence - Pattern 1)
+    learningPersistence;
     // Closed-Loop: Scheduler
     schedulerInterval;
     constructor(skillManager, config = {}, honcho) {
@@ -170,17 +173,21 @@ export class SelfEvolutionEngine {
     }
     async doInitialize() {
         // 1. First: Load traces from disk (if persistence exists)
-        // 2. Second: Discover skills (Skill Runtime - Pattern 2)
+        // 2. Second: Initialize learning persistence
+        this.learningPersistence = new EvolutionLearningPersistence(this.dataDir);
+        await this.learningPersistence.load();
+        // 3. Third: Discover skills (Skill Runtime - Pattern 2)
         try {
             await this.skillManager.discover();
         }
         catch {
             // Skill discovery is best-effort
         }
-        // 3. Third: Restore recovery points
+        // 4. Fourth: Restore recovery points
         this.loadRecoveryPoints();
-        // 4. Fourth: Start scheduler for periodic evolution
+        // 5. Fifth: Start scheduler for periodic evolution
         this.startScheduler();
+        console.log('[SelfEvolution] Engine initialized with learning persistence');
     }
     // ============================================================
     // Closed-Loop: Scheduler (Periodic Evolution)
@@ -437,7 +444,8 @@ export class SelfEvolutionEngine {
             // Read current content
             const currentContent = await this.skillManager.readSkillContent(skill);
             // Generate candidates (Task Decomposition - Pattern 9)
-            const allVariants = this.generateCandidates(currentContent, iterations);
+            // Pass skillSlug for learning hints
+            const allVariants = this.generateCandidates(currentContent, iterations, skill.slug);
             // Score each candidate (Memoize promise - Pattern 4)
             const scoredPromises = allVariants.map((variant, index) => this.scoreCandidateAsync(skill, variant, index));
             // Wait for all evaluations (Multi-Agent - Pattern 11)
@@ -465,20 +473,49 @@ export class SelfEvolutionEngine {
     }
     /**
      * Generate mutation candidates
+     * Uses learning hints to guide mutations toward successful patterns
      */
-    generateCandidates(content, limit) {
+    generateCandidates(content, limit, skillSlug) {
         const variants = new Set([content]);
+        // Get learning hints if available
+        const hints = skillSlug && this.learningPersistence
+            ? this.learningPersistence.getHints(skillSlug)
+            : { successfulPatterns: [], avoidPatterns: [], avgSuccessfulScore: 0.5 };
         for (const rule of MUTATION_RULES) {
             for (const variant of [...variants]) {
                 const mutations = rule.apply(variant);
                 for (const m of mutations) {
                     if (variants.size >= limit)
                         break;
-                    variants.add(m);
+                    // If we have successful patterns, give slight preference to content containing them
+                    if (hints.successfulPatterns.length > 0) {
+                        const lowerM = m.toLowerCase();
+                        const hasGoodPattern = hints.successfulPatterns.some(p => lowerM.includes(p));
+                        const hasBadPattern = hints.avoidPatterns.some(p => lowerM.includes(p));
+                        // Skip if it contains patterns to avoid
+                        if (hasBadPattern)
+                            continue;
+                        // If it has good patterns, prioritize it (add first)
+                        if (hasGoodPattern) {
+                            variants.add(m);
+                        }
+                        else if (variants.size < limit * 0.8) {
+                            // Add regular variants only if we're below 80% capacity
+                            variants.add(m);
+                        }
+                    }
+                    else {
+                        variants.add(m);
+                    }
                 }
             }
         }
-        return [...variants].slice(0, limit);
+        const result = [...variants].slice(0, limit);
+        // Log hint usage for debugging
+        if (hints.successfulPatterns.length > 0) {
+            console.log(`[SelfEvolution] Used ${hints.successfulPatterns.length} learned patterns for ${skillSlug}`);
+        }
+        return result;
     }
     // ============================================================
     // LLM-as-Judge Evaluation (Phase 2)
@@ -1017,6 +1054,11 @@ Output ONLY the improved Prompt (no JSON, no commentary):`, 'quick');
                 return false;
             }
             console.log(`[SelfEvolution] Applied best candidate (score=${result.bestCandidate.score}) to ${skillSlug}`);
+            // Record learning for future evolution guidance
+            if (this.learningPersistence) {
+                await this.learningPersistence.recordSuccess(skillSlug, result.bestCandidate.content, result.bestCandidate.score, false // verification not yet confirmed
+                );
+            }
         }
         catch (err) {
             console.error(`[SelfEvolution] Write error for ${skillSlug}:`, err);
