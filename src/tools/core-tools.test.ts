@@ -126,7 +126,7 @@ describe('Core Tools', () => {
     const { registerCoreTools } = await import('./core-tools.js');
     registerCoreTools(mockApi, mockState);
     
-    expect(mockApi.getTools().length).toBe(10);
+    expect(mockApi.getTools().length).toBe(11);
   });
 
 });

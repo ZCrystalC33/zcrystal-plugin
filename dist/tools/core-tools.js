@@ -213,5 +213,30 @@ export function registerCoreTools(api, state) {
             }
         },
     }, { optional: true });
+    // Self-Doubt Recall - Agent self-triggered memory recovery
+    // Use when Agent suspects memory gaps: "我不記得", "不確定", "需要確認"
+    api.registerTool({
+        name: 'zcrystal_recall',
+        label: 'ZCrystal Recall',
+        description: 'Recall relevant context from conversation history. Use when you suspect memory gaps or need to verify previous context. Call this BEFORE saying "I don\'t remember".',
+        parameters: Type.Object({
+            query: Type.String(),
+            limit: Type.Optional(Type.Number()),
+        }),
+        async execute(_id, params) {
+            const limit = params.limit || 5;
+            try {
+                const { quickRecall } = await import('../memory/recall.js');
+                const results = await quickRecall(params.query, limit);
+                if (results) {
+                    return okResult(`[Recall] Found relevant context:\n${results}\n\n💡 If this helps, incorporate into your response.`, { query: params.query });
+                }
+                return okResult('[Recall] No relevant context found. You may proceed with your best knowledge.', { query: params.query });
+            }
+            catch (err) {
+                return errResult('Recall failed: ' + String(err));
+            }
+        },
+    }, { optional: true });
 }
 //# sourceMappingURL=core-tools.js.map
