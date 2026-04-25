@@ -238,3 +238,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 | Scheduler cleanup | unload hook 呼叫 stop() |
 
 *最後更新：2026-04-22 v1.0.2*
+
+# 2026-04-25 (下午 v3)
+
+## [v1.0.5] - 2026-04-25
+
+> **Self-Doubt Recall System — Agent 自我懷疑與回憶**
+
+### ✨ Features（新功能）
+
+| Commit | 功能 | 說明 |
+|--------|------|------|
+| `b25e74e` | zcrystal_recall | Agent 自我觸發的記憶復原工具 |
+| `b25e74e` | Self-Doubt Recall | Agent 感覺「不確定」時可先呼叫再回答 |
+| `b25e74e` | UNCERTAINTY_MARKERS | 我不記得、不確定、需要確認等觸發關鍵字 |
+
+### 🧪 Test Results
+
+- `npm run build && npm test` → **117/117 tests passed** ✅
+
