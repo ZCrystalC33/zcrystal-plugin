@@ -4,6 +4,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 ---
 
+# 2026-04-25
+
+## [v1.0.2] - 2026-04-25
+
+> **FTS5 即時索引 + 進化系統修復 + 自動召回**
+
+### ✨ Features（新功能）
+
+| Commit | 功能 | 說明 |
+|--------|------|------|
+| `c28fb8b` | Real-time FTS5 Indexing | Hook 觸發即時索引，延遲 ~0ms |
+| `e3cda0e` | Direct FTS5 Search | Python subprocess 直搜，無 MCP HTTP 依賴 |
+| `be791d5` | Auto-Context Recall | before_prompt_build 自動偵測記憶缺口 |
+
+### 🔧 Bug Fixes（錯誤修復）
+
+| Commit | 修復內容 |
+|--------|----------|
+| `a916230` | 全面修復 16 個程式碼缺陷 |
+| `e692c12` | 進化系統：evolveSkill 完成後自動 applyBestCandidate |
+| `e692c12` | 新增 evolvingSkills Set 防並發進化衝突 |
+| `e692c12` | 新增 zcrystal_evolution_control tool（start/stop/status）|
+| `81b194a` | Auto-start evolutionScheduler（Plugin 啟動時自動呼叫）|
+
+### 🧪 Test Results
+
+- `npm run build && npm test` → **117/117 tests passed** ✅
+
+---
+
 # 2026-04-22
 
 ## [v1.0.1] - 2026-04-22

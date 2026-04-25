@@ -1,18 +1,18 @@
 # ZCrystal Plugin for OpenClaw
 
-> **v1.0.1** — 自我進化插件 / Self-Evolution Engine / Proactive AI
+> **v1.0.2** — 自我進化插件 / Self-Evolution Engine / Proactive AI / FTS5 即時搜尋
 
 [![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](CHANGELOG.md)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.0.0-brightgreen)](package.json)
 [![OpenClaw](https://img.shields.io/badge/openclaw-2026.4.15-blueviolet)](openclaw.plugin.json)
-[![Tests](https://img.shields.io/badge/tests-101%2F101-brightgreen)](package.json)
+[![Tests](https://img.shields.io/badge/tests-117%2F117-brightgreen)](package.json)
 [![Status](https://img.shields.io/badge/status-production%20ready-brightgreen)]
 
 ---
 
 ## 核心功能
 
-### 95 工具
+### 95+ 工具
 
 | 類別 | 工具數 | 核心功能 |
 |------|--------|----------|
@@ -26,16 +26,27 @@
 | 工具生態 | 8 | ToolHub、FTS5 搜索、Webhook |
 | 其他 | 12 | 日誌、指標、模型選擇、評審引擎 |
 
-### 自我進化引擎（Self-Evolution Engine）
+### 🧬 自我進化引擎（Self-Evolution Engine）
 
 ZCrystal 的核心引擎，透過 DSPy + GEPA 驅動的技能自動優化：
 
-- **封閉循環驗證**：候選版本經 LLM 評估後自動應用
+- **封閉循環驗證**：候選版本經 LLM 評估後自動應用（已修復）
 - **自動觸發**：根據成功率和訊息量自動觸發進化
+- **每小時自動進化**：Plugin 啟動時自動啟動 scheduler
 - **備份與回滾**：每次進化前自動備份，支援一鍵回滾
-- **記憶邊界**：進化歷史、應用候選、備份均設有上限（50/100/50）
+- **並發防護**：evolvingSkills Set 防止同技能重複進化
 
-### Proactive AI
+### 🔍 FTS5 即時搜尋系統
+
+全文搜尋整合，實現「零延遲記憶召回」：
+
+- **即時索引**：每條訊息發送/接收時立即寫入 FTS5（~0ms）
+- **自動召回**：before_prompt_build hook 偵測「之前/任務/進度」等關鍵字自動搜尋
+- **直接搜尋**：Python subprocess 直連，無 MCP HTTP 依賴
+- **噪音過濾**：NO_REPLY、HEARTBEAT_OK、系統訊息自動排除
+- **備援 Cron**：每 5 分鐘增量索引確保不漏
+
+### 🧠 Proactive AI
 
 主動式 AI 工作層，主動預測需求而非被動回應：
 
@@ -44,7 +55,7 @@ ZCrystal 的核心引擎，透過 DSPy + GEPA 驅動的技能自動優化：
 - **心跳監控**：每 5 分鐘自動健康檢查
 - **主動建議**：根據上下文提供建議
 
-### 記憶系統（L1-L5）
+### 💾 記憶系統（L1-L5）
 
 | 層級 | 類型 | 持久性 | 用途 |
 |------|------|--------|------|
@@ -53,6 +64,35 @@ ZCrystal 的核心引擎，透過 DSPy + GEPA 驅動的技能自動優化：
 | L3 | 短期記憶 | 磁盤 | 跨會話 |
 | L4 | 長期記憶 | 磁盤 | 持久化 |
 | L5 | 歸檔記憶 | 磁盤 | 冷存儲 |
+
+---
+
+## 系統架構
+
+```
+User (Telegram)
+    ↓ message:received / message:sent
+OpenClaw Gateway
+    ↓
+┌─────────────────────────────┐
+│   ZCrystal Plugin           │
+│                             │
+│  ├─ Hooks:                  │
+│  │  ├─ message:received     │ → FTS5 即時索引
+│  │  ├─ message:sent         │ → FTS5 即時索引
+│  │  └─ before_prompt_build  │ → Auto-context recall
+│  │                          │
+│  ├─ 95+ Tools:              │
+│  │  ├─ zcrystal_search      │ → FTS5 搜尋
+│  │  ├─ zcrystal_evo_*      │ → 進化控制
+│  │  └─ ...                  │
+│  │                          │
+│  └─ Self-Evolution Engine:  │
+│     ├─ evolveSkill()       │
+│     ├─ applyBestCandidate() │ → 自動寫入磁盤
+│     └─ EvolutionScheduler   │ → 每小時自動運行
+└─────────────────────────────┘
+```
 
 ---
 
@@ -73,76 +113,39 @@ npm test
 // 健康檢查
 await zcrystal.unified({ tool: 'zcrystal_evo_health' })
 
-// 觸發自我進化
+// FTS5 搜尋對話歷史
+await zcrystal.unified({ tool: 'zcrystal_search', params: { query: '關鍵字' } })
+
+// 手動觸發進化（一般不需要）
 await zcrystal.unified({ tool: 'zcrystal_evolve' })
 
-// 主動式建議
-await zcrystal.unified({ tool: 'zcrystal_proactive_suggest' })
+// 控制自動進化
+await zcrystal.unified({ tool: 'zcrystal_evolution_control', params: { action: 'status' } })
+
+// 查看進化狀態
+await zcrystal.unified({ tool: 'zcrystal_evolution_status' })
 
 // 創建任務
 await zcrystal.unified({
   tool: 'zcrystal_task_create',
   params: { title: '我的任務' }
 })
-
-// 搜尋技能
-await zcrystal.unified({
-  tool: 'zcrystal_skill_indexer_search',
-  params: { query: '搜尋關鍵字' }
-})
-
-// 查看進化狀態
-await zcrystal.unified({ tool: 'zcrystal_evolution_status' })
 ```
 
 ---
 
-## 架構
+## 演進歷程
 
-```
-┌──────────────────────────────────────────┐
-│             OpenClaw Core                │
-└──────────────────────────────────────────┘
-                     │
-                     ▼
-┌──────────────────────────────────────────┐
-│         ZCrystal Plugin (v1.0.1)          │
-│                                          │
-│  ┌────────────────────────────────────┐  │
-│  │    UnifiedApiRouter (30+ endpoints) │  │
-│  ├────────┬────────┬────────┬─────────┤  │
-│  │ Health │ Task   │ Skill  │Evolution│  │
-│  └────────┴────────┴────────┴─────────┘  │
-│                                          │
-│  ┌──────────┬──────────┬───────────────┐  │
-│  │ Circuit │  Rate   │  FTS5 Bridge  │  │
-│  │ Breaker │ Limiter │               │  │
-│  └──────────┴──────────┴───────────────┘  │
-│                                          │
-│  ┌──────────┬──────────┬─────────────┐   │
-│  │Proactive│ Workflow │  Adapters   │   │
-│  │   AI    │  Engine  │             │   │
-│  └──────────┴──────────┴─────────────┘   │
-└──────────────────────────────────────────┘
-```
+| 版本 | 日期 | 重大更新 |
+|------|------|----------|
+| v1.0.2 | 2026-04-25 | FTS5 即時索引、進化系統修復（auto-apply）、Auto-context recall |
+| v1.0.1 | 2026-04-22 | 效能優化（I/O -50%、搜尋 -70%）|
+| v1.0.0 | 2026-04-21 | 95 工具 + 自我進化引擎 + Proactive AI + 101 測試通過 |
 
 ---
 
-## 開發
+## 贊助與連結
 
-```bash
-npm run build   # TypeScript → JavaScript
-npm test        # 執行全部測試（101 tests）
-```
-
----
-
-## 更新日誌
-
-完整更新日誌請參考 [CHANGELOG.md](CHANGELOG.md)
-
----
-
-## License
-
-MIT License
+- **GitHub**: https://github.com/ZCrystalC33/zcrystal-plugin
+- **FTS5 Skill**: https://github.com/ZCrystalC33/fts5-openclaw-skill
+- **Plugin ID**: `zcrystal`
