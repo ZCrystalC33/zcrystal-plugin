@@ -45,15 +45,38 @@ export function registerCoreTools(api, state) {
     api.registerTool({
         name: 'zcrystal_search',
         label: 'ZCrystal Search',
-        description: 'Search conversation history using Honcho',
+        description: 'Search conversation history (FTS5)',
         parameters: Type.Object({ query: Type.String(), limit: Type.Optional(Type.Number()) }),
         async execute(_id, params) {
-            // @zcrystal/evo HonchoClient.search(query, limit) returns Promise<Result<unknown[]>>
-            const result = await state.honcho.search(params.query, params.limit || 10);
-            if (result.ok && Array.isArray(result.data) && result.data.length > 0) {
-                return okResult(JSON.stringify(result.data, null, 2), { count: result.data.length });
+            const limit = params.limit || 10;
+            // FIX: Direct FTS5 search via Python subprocess (bypasses MCP HTTP dependency)
+            try {
+                const { spawn } = await import('node:child_process');
+                const result = await new Promise((resolve, reject) => {
+                    const py = spawn('python3', [
+                        '-c',
+                        `import sys; sys.path.insert(0, '/home/snow/.openclaw'); from skills.fts5 import search; results = search(${JSON.stringify(params.query)}, limit=${limit}); print([[r['content'], r['sender'], r['timestamp']] for r in results], sep='\n')`
+                    ]);
+                    let stdout = '';
+                    let stderr = '';
+                    py.stdout.on('data', (d) => stdout += d.toString());
+                    py.stderr.on('data', (d) => stderr += d.toString());
+                    py.on('close', (code) => code === 0 ? resolve(stdout) : reject(new Error(stderr || `exit ${code}`)));
+                    py.on('error', reject);
+                });
+                if (result.trim()) {
+                    return okResult(`FTS5 Search Results:\n${result}`, { query: params.query });
+                }
+                return errResult('No results found');
             }
-            return errResult(result.ok ? 'Search returned no results' : String(result.error ?? 'Search failed'));
+            catch (err) {
+                // Fallback to Honcho if FTS5 fails
+                const honchoResult = await state.honcho.search(params.query, limit);
+                if (honchoResult.ok && Array.isArray(honchoResult.data) && honchoResult.data.length > 0) {
+                    return okResult(JSON.stringify(honchoResult.data, null, 2), { count: honchoResult.data.length });
+                }
+                return errResult('Search failed: ' + String(err));
+            }
         },
     });
     // zcrystal_ask_user
