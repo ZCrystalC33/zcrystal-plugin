@@ -467,6 +467,29 @@ export default definePluginEntry({
                     return { text: 'Self-evolution failed: ' + result.error };
                 },
             });
+            // FIX: Tool to enable/disable auto-evolution scheduler
+            api.registerTool({
+                name: 'zcrystal_evolution_control',
+                label: 'ZCrystal Evolution Control',
+                description: 'Enable or disable auto-evolution scheduler',
+                parameters: Type.Object({ action: Type.Union([Type.Literal('start'), Type.Literal('stop'), Type.Literal('status')]) }),
+                async execute(_id, params) {
+                    if (!state || !state.evolutionScheduler)
+                        return errResult('Plugin not initialized or scheduler unavailable');
+                    if (params.action === 'start') {
+                        state.evolutionScheduler.start();
+                        return okResult('✅ Auto-evolution scheduler started (1 hour interval)');
+                    }
+                    else if (params.action === 'stop') {
+                        state.evolutionScheduler.stop();
+                        return okResult('⏸ Auto-evolution scheduler stopped');
+                    }
+                    else {
+                        const running = state.evolutionScheduler.running;
+                        return okResult(`Evolution scheduler: ${running ? '🟢 running' : '🔴 stopped'}`);
+                    }
+                },
+            });
             api.registerCommand({
                 name: 'zcrystal_learn',
                 description: 'Teach ZCrystal your preferences',

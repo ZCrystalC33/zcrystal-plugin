@@ -56,8 +56,10 @@ export declare class SelfEvolutionEngine {
     private initialized;
     private initPromise?;
     private appliedCandidates;
+    private evolvingSkills;
     private backups;
     private readonly BACKUP_TTL_MS;
+    private _backupDir?;
     private schedulerInterval?;
     constructor(skillManager: SkillManager, config?: Partial<EvolutionConfig>, honcho?: HonchoClient);
     /**

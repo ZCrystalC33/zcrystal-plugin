@@ -235,10 +235,13 @@ export class SelfEvolutionEngine {
   // Closed-Loop: Applied candidate verification
   private appliedCandidates: Map<string, AppliedCandidate> = new Map();
 
-  // Closed-Loop: Backups for rollback
-  // Backup map with TTL-based eviction
+  // Closed-Loop: In-progress evolution tracking (prevents race conditions)
+  private evolvingSkills: Set<string> = new Set();
+
+  // Closed-Loop: Backups for rollback (Disk-persisted for crash recovery)
   private backups: Map<string, { data: Backup; timestamp: number }> = new Map();
   private readonly BACKUP_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+  private _backupDir?: string;
 
   // Closed-Loop: Scheduler
   private schedulerInterval?: ReturnType<typeof setInterval>;
@@ -586,37 +589,54 @@ export class SelfEvolutionEngine {
     // Ensure initialized (Bootstrap - Pattern 10)
     await this.initialize();
 
-    const iterations = options?.iterations || this.config.iterations || MAX_CANDIDATES;
-    const candidates: EvolutionCandidate[] = [];
-
-    // Read current content
-    const currentContent = await this.skillManager.readSkillContent(skill);
-
-    // Generate candidates (Task Decomposition - Pattern 9)
-    const allVariants = this.generateCandidates(currentContent, iterations);
-
-    // Score each candidate (Memoize promise - Pattern 4)
-    const scoredPromises = allVariants.map((variant, index) =>
-      this.scoreCandidateAsync(skill, variant, index)
-    );
-
-    // Wait for all evaluations (Multi-Agent - Pattern 11)
-    const scoredCandidates = await Promise.all(scoredPromises);
-    candidates.push(...scoredCandidates);
-
-    // Sort by score (Select - Pattern 4)
-    candidates.sort((a, b) => b.score - a.score);
-
-    // Route evolution (Agent Orchestration - Pattern 7)
-    const result = await this.routeEvolution(candidates, skill);
-
-    // Bounded evolution history (FIFO eviction)
-    this.evolutionHistory.push(result);
-    if (this.evolutionHistory.length > MAX_HISTORY) {
-      this.evolutionHistory.shift();
+    // Prevent concurrent evolution of same skill (Pattern 6: Isolate)
+    if (this.evolvingSkills.has(skill.slug)) {
+      console.log(`[SelfEvolution] ${skill.slug} already evolving, skipping`);
+      return { target: `skill:${skill.slug}`, candidates: [], bestCandidate: undefined, timestamp: Date.now() };
     }
+    this.evolvingSkills.add(skill.slug);
 
-    return result;
+    try {
+      const iterations = options?.iterations || this.config.iterations || MAX_CANDIDATES;
+      const candidates: EvolutionCandidate[] = [];
+
+      // Read current content
+      const currentContent = await this.skillManager.readSkillContent(skill);
+
+      // Generate candidates (Task Decomposition - Pattern 9)
+      const allVariants = this.generateCandidates(currentContent, iterations);
+
+      // Score each candidate (Memoize promise - Pattern 4)
+      const scoredPromises = allVariants.map((variant, index) =>
+        this.scoreCandidateAsync(skill, variant, index)
+      );
+
+      // Wait for all evaluations (Multi-Agent - Pattern 11)
+      const scoredCandidates = await Promise.all(scoredPromises);
+      candidates.push(...scoredCandidates);
+
+      // Sort by score (Select - Pattern 4)
+      candidates.sort((a, b) => b.score - a.score);
+
+      // Route evolution (Agent Orchestration - Pattern 7)
+      const result = await this.routeEvolution(candidates, skill);
+
+      // Bounded evolution history (FIFO eviction)
+      this.evolutionHistory.push(result);
+      if (this.evolutionHistory.length > MAX_HISTORY) {
+        this.evolutionHistory.shift();
+      }
+
+      // FIX: Auto-apply best candidate after evolution completes
+      if (result.bestCandidate) {
+        const applied = await this.applyBestCandidate(result);
+        console.log(`[SelfEvolution] Auto-apply best candidate for ${skill.slug}: ${applied ? 'success' : 'failed'}`);
+      }
+
+      return result;
+    } finally {
+      this.evolvingSkills.delete(skill.slug);
+    }
   }
 
   /**

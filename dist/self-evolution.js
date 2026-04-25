@@ -128,10 +128,12 @@ export class SelfEvolutionEngine {
     initPromise;
     // Closed-Loop: Applied candidate verification
     appliedCandidates = new Map();
-    // Closed-Loop: Backups for rollback
-    // Backup map with TTL-based eviction
+    // Closed-Loop: In-progress evolution tracking (prevents race conditions)
+    evolvingSkills = new Set();
+    // Closed-Loop: Backups for rollback (Disk-persisted for crash recovery)
     backups = new Map();
     BACKUP_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+    _backupDir;
     // Closed-Loop: Scheduler
     schedulerInterval;
     constructor(skillManager, config = {}, honcho) {
@@ -419,27 +421,43 @@ export class SelfEvolutionEngine {
     async evolveSkill(skill, options) {
         // Ensure initialized (Bootstrap - Pattern 10)
         await this.initialize();
-        const iterations = options?.iterations || this.config.iterations || MAX_CANDIDATES;
-        const candidates = [];
-        // Read current content
-        const currentContent = await this.skillManager.readSkillContent(skill);
-        // Generate candidates (Task Decomposition - Pattern 9)
-        const allVariants = this.generateCandidates(currentContent, iterations);
-        // Score each candidate (Memoize promise - Pattern 4)
-        const scoredPromises = allVariants.map((variant, index) => this.scoreCandidateAsync(skill, variant, index));
-        // Wait for all evaluations (Multi-Agent - Pattern 11)
-        const scoredCandidates = await Promise.all(scoredPromises);
-        candidates.push(...scoredCandidates);
-        // Sort by score (Select - Pattern 4)
-        candidates.sort((a, b) => b.score - a.score);
-        // Route evolution (Agent Orchestration - Pattern 7)
-        const result = await this.routeEvolution(candidates, skill);
-        // Bounded evolution history (FIFO eviction)
-        this.evolutionHistory.push(result);
-        if (this.evolutionHistory.length > MAX_HISTORY) {
-            this.evolutionHistory.shift();
+        // Prevent concurrent evolution of same skill (Pattern 6: Isolate)
+        if (this.evolvingSkills.has(skill.slug)) {
+            console.log(`[SelfEvolution] ${skill.slug} already evolving, skipping`);
+            return { target: `skill:${skill.slug}`, candidates: [], bestCandidate: undefined, timestamp: Date.now() };
         }
-        return result;
+        this.evolvingSkills.add(skill.slug);
+        try {
+            const iterations = options?.iterations || this.config.iterations || MAX_CANDIDATES;
+            const candidates = [];
+            // Read current content
+            const currentContent = await this.skillManager.readSkillContent(skill);
+            // Generate candidates (Task Decomposition - Pattern 9)
+            const allVariants = this.generateCandidates(currentContent, iterations);
+            // Score each candidate (Memoize promise - Pattern 4)
+            const scoredPromises = allVariants.map((variant, index) => this.scoreCandidateAsync(skill, variant, index));
+            // Wait for all evaluations (Multi-Agent - Pattern 11)
+            const scoredCandidates = await Promise.all(scoredPromises);
+            candidates.push(...scoredCandidates);
+            // Sort by score (Select - Pattern 4)
+            candidates.sort((a, b) => b.score - a.score);
+            // Route evolution (Agent Orchestration - Pattern 7)
+            const result = await this.routeEvolution(candidates, skill);
+            // Bounded evolution history (FIFO eviction)
+            this.evolutionHistory.push(result);
+            if (this.evolutionHistory.length > MAX_HISTORY) {
+                this.evolutionHistory.shift();
+            }
+            // FIX: Auto-apply best candidate after evolution completes
+            if (result.bestCandidate) {
+                const applied = await this.applyBestCandidate(result);
+                console.log(`[SelfEvolution] Auto-apply best candidate for ${skill.slug}: ${applied ? 'success' : 'failed'}`);
+            }
+            return result;
+        }
+        finally {
+            this.evolvingSkills.delete(skill.slug);
+        }
     }
     /**
      * Generate mutation candidates
