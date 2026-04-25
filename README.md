@@ -1,8 +1,8 @@
 # ZCrystal Plugin for OpenClaw
 
-> **v1.0.2** — 自我進化插件 / Self-Evolution Engine / Proactive AI / FTS5 即時搜尋
+> **v1.0.3** — 自我進化插件 / Self-Evolution Engine / FTS5 即時搜尋 / Why+How 結構化反饋
 
-[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](CHANGELOG.md)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.0.0-brightgreen)](package.json)
 [![OpenClaw](https://img.shields.io/badge/openclaw-2026.4.15-blueviolet)](openclaw.plugin.json)
 [![Tests](https://img.shields.io/badge/tests-117%2F117-brightgreen)](package.json)
@@ -30,11 +30,12 @@
 
 ZCrystal 的核心引擎，透過 DSPy + GEPA 驅動的技能自動優化：
 
-- **封閉循環驗證**：候選版本經 LLM 評估後自動應用（已修復）
+- **封閉循環驗證**：候選版本經 LLM 評估後自動應用
 - **自動觸發**：根據成功率和訊息量自動觸發進化
 - **每小時自動進化**：Plugin 啟動時自動啟動 scheduler
 - **備份與回滾**：每次進化前自動備份，支援一鍵回滾
 - **並發防護**：evolvingSkills Set 防止同技能重複進化
+- **Why+How 結構化反饋**：每一個修正都有 principle + applicationRule
 
 ### 🔍 FTS5 即時搜尋系統
 
@@ -42,9 +43,9 @@ ZCrystal 的核心引擎，透過 DSPy + GEPA 驅動的技能自動優化：
 
 - **即時索引**：每條訊息發送/接收時立即寫入 FTS5（~0ms）
 - **自動召回**：before_prompt_build hook 偵測「之前/任務/進度」等關鍵字自動搜尋
-- **直接搜尋**：Python subprocess 直連，無 MCP HTTP 依賴
+- **Progressive Disclosure**：3 層检索（index → timeline → deep-dive），大幅降低 Context 負擔
 - **噪音過濾**：NO_REPLY、HEARTBEAT_OK、系統訊息自動排除
-- **備援 Cron**：每 5 分鐘增量索引確保不漏
+- **隱私標籤**：`<private>...</private>` 內容寫入前自動移除
 
 ### 🧠 Proactive AI
 
@@ -74,24 +75,26 @@ User (Telegram)
     ↓ message:received / message:sent
 OpenClaw Gateway
     ↓
-┌─────────────────────────────┐
-│   ZCrystal Plugin           │
-│                             │
-│  ├─ Hooks:                  │
-│  │  ├─ message:received     │ → FTS5 即時索引
-│  │  ├─ message:sent         │ → FTS5 即時索引
-│  │  └─ before_prompt_build  │ → Auto-context recall
-│  │                          │
-│  ├─ 95+ Tools:              │
-│  │  ├─ zcrystal_search      │ → FTS5 搜尋
-│  │  ├─ zcrystal_evo_*      │ → 進化控制
-│  │  └─ ...                  │
-│  │                          │
-│  └─ Self-Evolution Engine:  │
-│     ├─ evolveSkill()       │
-│     ├─ applyBestCandidate() │ → 自動寫入磁盤
-│     └─ EvolutionScheduler   │ → 每小時自動運行
-└─────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│   ZCrystal Plugin (v1.0.3)                   │
+│                                             │
+│  ├─ Hooks:                                  │
+│  │  ├─ message:received → FTS5 即時索引     │
+│  │  ├─ message:sent → FTS5 即時索引          │
+│  │  └─ before_prompt_build → Auto-context  │
+│  │                                          │
+│  ├─ 95+ Tools:                              │
+│  │  ├─ zcrystal_search → FTS5 搜尋          │
+│  │  ├─ zcrystal_memory_index → Layer 1      │
+│  │  ├─ zcrystal_memory_get → Layer 3        │
+│  │  └─ zcrystal_evolution_control           │
+│  │                                          │
+│  └─ Self-Evolution Engine:                  │
+│     ├─ evolveSkill() → applyBestCandidate() │
+│     ├─ FeedbackStore (Why+How)              │
+│     ├─ EvolutionScheduler (每小時自動)       │
+│     └─ Reflexion (自我修正)                  │
+└─────────────────────────────────────────────┘
 ```
 
 ---
@@ -116,20 +119,17 @@ await zcrystal.unified({ tool: 'zcrystal_evo_health' })
 // FTS5 搜尋對話歷史
 await zcrystal.unified({ tool: 'zcrystal_search', params: { query: '關鍵字' } })
 
-// 手動觸發進化（一般不需要）
-await zcrystal.unified({ tool: 'zcrystal_evolve' })
+// Progressive Disclosure - Layer 1: 輕量索引
+await zcrystal.unified({ tool: 'zcrystal_memory_index', params: { query: '關鍵字' } })
+
+// Progressive Disclosure - Layer 3: 依 ID 取得完整內容
+await zcrystal.unified({ tool: 'zcrystal_memory_get', params: { id: 1234 } })
 
 // 控制自動進化
 await zcrystal.unified({ tool: 'zcrystal_evolution_control', params: { action: 'status' } })
 
 // 查看進化狀態
 await zcrystal.unified({ tool: 'zcrystal_evolution_status' })
-
-// 創建任務
-await zcrystal.unified({
-  tool: 'zcrystal_task_create',
-  params: { title: '我的任務' }
-})
 ```
 
 ---
@@ -138,6 +138,7 @@ await zcrystal.unified({
 
 | 版本 | 日期 | 重大更新 |
 |------|------|----------|
+| v1.0.3 | 2026-04-25 | Why+How Feedback Pattern + FeedbackStore + Claude-Mem 功能整合 |
 | v1.0.2 | 2026-04-25 | FTS5 即時索引、進化系統修復（auto-apply）、Auto-context recall |
 | v1.0.1 | 2026-04-22 | 效能優化（I/O -50%、搜尋 -70%）|
 | v1.0.0 | 2026-04-21 | 95 工具 + 自我進化引擎 + Proactive AI + 101 測試通過 |

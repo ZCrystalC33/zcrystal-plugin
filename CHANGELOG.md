@@ -4,7 +4,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 ---
 
-# 2026-04-25
+# 2026-04-25 (下午)
+
+## [v1.0.3] - 2026-04-25
+
+> **Why+How 進化模式 + Claude-Mem 功能整合**
+
+### ✨ Features（新功能）
+
+| Commit | 功能 | 說明 |
+|--------|------|------|
+| `2f5a546` | Why+How Feedback Pattern | Claude-Memory-Framework 結構化反饋模式 |
+| `2f5a546` | FeedbackStore | 磁盤持久化 Why+How 條目（FIFO, 200 entries）|
+| `2f5a546` | LLM Prompt 更新 | 評估請求 evaluationFeedback，診斷請求 principle/applicationRule |
+
+### 🔧 Bug Fixes（錯誤修復）
+
+| Commit | 修復內容 |
+|--------|----------|
+| `2f5a546` | FeedbackStore 整合進 SelfEvolutionEngine |
+| `2f5a546` | Reflexion 修正後自動寫入 FeedbackStore |
+
+### 🧪 Test Results
+
+- `npm run build && npm test` → **117/117 tests passed** ✅
+
+---
+
+# 2026-04-25 (上午)
 
 ## [v1.0.2] - 2026-04-25
 
