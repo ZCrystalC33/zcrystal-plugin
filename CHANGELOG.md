@@ -300,3 +300,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 - `npm run build && npm test` → **117/117 tests passed** ✅
 
+
+## [v1.0.8] - 2026-04-25
+
+> **Evolution Learning Persistence - Pattern 1 Complete**
+
+### ✨ Features（新功能）
+
+| Commit | 功能 | 說明 |
+|--------|------|------|
+| `6db0c35` | EvolutionLearningPersistence | 進化學習持久化類 |
+| `6db0c35` | recordSuccess() | 每次套用後記錄成功候選 |
+| `6db0c35` | Pattern extraction | 從成功內容提取模式關鍵字 |
+| `6db0c35` | Learning hints | generateCandidates() 使用學習指引 |
+
+### 📚 Learning Flow
+
+```
+applyBestCandidate() → recordSuccess() → extractPatterns() → save to disk
+initialize() → load() → restore learning → getHints() → guide mutations
+```
+
+### 🔧 Optimizations（優化）
+
+| 項目 | 說明 | 狀態 |
+|------|------|------|
+| Context Injection | 讓 recall 結果能注入 Agent | ✅ 已完成 |
+| Evolution Learning Persistence | 進化結果累積到磁盤 | ✅ 已完成 |
+| FTS5 Batch Write | 減少多餘 process | ⏳ 待實作 |
+
+### 🧪 Test Results
+
+- `npm run build && npm test` → **117/117 tests passed** ✅
+
