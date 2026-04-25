@@ -227,16 +227,21 @@ export default definePluginEntry({
       getSkills,
       60 * 60 * 1000 // 1 hour interval
     );
-    
-    // Start auto-evolution (disabled by default, use tool to enable)
-    // evolutionScheduler.start();
-    
+
     state = { 
       router, honcho, skillManager, selfEvolution, evolutionCoordinator, evolutionScheduler, reviewEngine,
       toolHub, skillGenerator, skillVersioning, skillIndexer, skillValidator, skillMerger,
       circuitBreaker, rateLimiter, logger, metrics, workflowEngine,
       skillAdapter, skillSyncManager, replayRunner, hookRegistry
     };
+
+    // FIX: Auto-start evolution scheduler (every 1 hour by default)
+    try {
+      evolutionScheduler.start();
+      console.log('[ZCrystal] Auto-evolution scheduler started (1 hour interval)');
+    } catch (err) {
+      console.warn('[ZCrystal] Failed to start evolution scheduler:', err);
+    }
     
     // =====================================================================
     // Auto-Trigger Setup (Heartbeat & Proactive Check)
