@@ -24,6 +24,7 @@
  * 12. Long-Running Agents - Initializer pattern
  * 13. Codex/AI Coding - Context-first design
  */
+import { FeedbackStore } from './feedback-store.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -115,6 +116,7 @@ export class SelfEvolutionEngine {
     // State (Memory Persistence - Pattern 1)
     skillManager;
     honcho;
+    feedbackStore; // Why+How feedback entries
     traces = new Map();
     dataDir = process.env.ZCRYSTAL_TEMP_PATH || join(tmpdir(), 'zcrystal');
     evolutionHistory = [];
@@ -146,6 +148,8 @@ export class SelfEvolutionEngine {
             provider: config.provider,
             model: config.model,
         };
+        // Initialize FeedbackStore for Why+How entries (disk-backed, Memory Persistence Pattern 1)
+        this.feedbackStore = new FeedbackStore(this.dataDir);
     }
     // ============================================================
     // Bootstrap Sequence (Pattern 10)
@@ -601,7 +605,17 @@ Evaluation dimensions (each 1-10):
 3. Actionability: Can the AI execute it correctly?
 
 Output ONLY valid JSON:
-{"score": 0.8, "clarity": 8, "completeness": 7, "actionability": 9, "reasoning": "Brief explanation"}`;
+{
+  "score": 0.8,
+  "clarity": 8,
+  "completeness": 7,
+  "actionability": 9,
+  "reasoning": "Brief explanation",
+  "evaluationFeedback": {
+    "whyScore": "Why this overall score (specific weakness or strength) (≤100 chars)",
+    "howToImprove": "Concrete actionable rule to improve this type of prompt (≤150 chars)"
+  }
+}`;
     }
     parseEvaluation(response, fallbackContent) {
         // Robust JSON parsing
@@ -609,6 +623,12 @@ Output ONLY valid JSON:
         if (!parsed) {
             return this.ruleBasedEvaluate(fallbackContent);
         }
+        // Extract evaluationFeedback (Why + How to Apply)
+        const evalFeedbackRaw = parsed.evaluationFeedback;
+        const evaluationFeedback = evalFeedbackRaw ? {
+            whyScore: evalFeedbackRaw.whyScore ?? '',
+            howToImprove: evalFeedbackRaw.howToImprove ?? '',
+        } : undefined;
         // Apply bounds (Tool & Safety - Pattern 3)
         return {
             score: this.clampScore(parsed.score ?? SCORE_DEFAULT),
@@ -616,6 +636,7 @@ Output ONLY valid JSON:
             completeness: this.clampDimension(parsed.completeness ?? 5),
             actionability: this.clampDimension(parsed.actionability ?? 5),
             reasoning: parsed.reasoning ?? 'No reasoning provided',
+            evaluationFeedback,
         };
     }
     parseJSONResponse(response) {

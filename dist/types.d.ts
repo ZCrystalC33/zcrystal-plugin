@@ -110,6 +110,26 @@ export interface Mutation {
     original: string;
     mutated: string;
     rationale: string;
+    principle?: string;
+    applicationRule?: string;
+}
+/**
+ * Actionable feedback entry (Claude-Memory-Framework pattern).
+ * Records what happened, why it happened, and how to apply the lesson.
+ */
+export interface FeedbackEntry {
+    /** What happened (concrete event description) */
+    what: string;
+    /** Why this happened (generalizable principle) */
+    why: string;
+    /** How to apply the principle (actionable rule) */
+    howToApply: string;
+    /** When this feedback is relevant (context triggers) */
+    trigger: string;
+    /** Confidence: how generalizable this principle is [0-1] */
+    confidence: number;
+    /** Timestamp when this feedback was created */
+    timestamp: number;
 }
 /**
  * Memory Layer Key Schema (FIX: Documented to prevent key collisions)

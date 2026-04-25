@@ -34,6 +34,7 @@ import type {
 } from './types.js';
 import { SkillManager } from './skill-manager.js';
 import { HonchoClient } from './honcho-client.js';
+import { FeedbackStore } from './feedback-store.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -202,11 +203,18 @@ export interface LLMEvaluationResult {
   completeness: number;    // 1-10
   actionability: number;   // 1-10
   reasoning: string;       // Why this score
+  // Why + How to Apply (Claude-Memory-Framework pattern)
+  evaluationFeedback?: {
+    whyScore: string;      // WHY: why this overall score
+    howToImprove: string;  // HOW: actionable rule to improve
+  };
 }
 
 // Diagnosis response from Reflexion
 interface DiagnosisResponse {
   diagnosis: string;
+  principle?: string;       // WHY: generalizable principle
+  applicationRule?: string; // HOW: actionable rule
   suggestions: string[];
 }
 
@@ -218,6 +226,7 @@ export class SelfEvolutionEngine {
   // State (Memory Persistence - Pattern 1)
   private skillManager: SkillManager;
   private honcho?: HonchoClient;
+  private feedbackStore?: FeedbackStore;  // Why+How feedback entries
   private traces: Map<string, ExecutionTrace[]> = new Map();
   private dataDir: string = process.env.ZCRYSTAL_TEMP_PATH || join(tmpdir(), 'zcrystal');
   private evolutionHistory: EvolutionResult[] = [];
@@ -260,6 +269,8 @@ export class SelfEvolutionEngine {
       provider: config.provider,
       model: config.model,
     };
+    // Initialize FeedbackStore for Why+How entries (disk-backed, Memory Persistence Pattern 1)
+    this.feedbackStore = new FeedbackStore(this.dataDir);
   }
 
   // ============================================================
@@ -805,23 +816,41 @@ Evaluation dimensions (each 1-10):
 3. Actionability: Can the AI execute it correctly?
 
 Output ONLY valid JSON:
-{"score": 0.8, "clarity": 8, "completeness": 7, "actionability": 9, "reasoning": "Brief explanation"}`;
+{
+  "score": 0.8,
+  "clarity": 8,
+  "completeness": 7,
+  "actionability": 9,
+  "reasoning": "Brief explanation",
+  "evaluationFeedback": {
+    "whyScore": "Why this overall score (specific weakness or strength) (≤100 chars)",
+    "howToImprove": "Concrete actionable rule to improve this type of prompt (≤150 chars)"
+  }
+}`;
   }
 
   private parseEvaluation(response: string, fallbackContent: string): LLMEvaluationResult {
     // Robust JSON parsing
-    const parsed = this.parseJSONResponse(response);
+    const parsed = this.parseJSONResponse(response) as Record<string, unknown>;
     if (!parsed) {
       return this.ruleBasedEvaluate(fallbackContent);
     }
 
+    // Extract evaluationFeedback (Why + How to Apply)
+    const evalFeedbackRaw = parsed.evaluationFeedback as Record<string, string> | undefined;
+    const evaluationFeedback = evalFeedbackRaw ? {
+      whyScore: evalFeedbackRaw.whyScore ?? '',
+      howToImprove: evalFeedbackRaw.howToImprove ?? '',
+    } : undefined;
+
     // Apply bounds (Tool & Safety - Pattern 3)
     return {
-      score: this.clampScore(parsed.score ?? SCORE_DEFAULT),
-      clarity: this.clampDimension(parsed.clarity ?? 5),
-      completeness: this.clampDimension(parsed.completeness ?? 5),
-      actionability: this.clampDimension(parsed.actionability ?? 5),
-      reasoning: parsed.reasoning ?? 'No reasoning provided',
+      score: this.clampScore(parsed.score as number ?? SCORE_DEFAULT),
+      clarity: this.clampDimension(parsed.clarity as number ?? 5),
+      completeness: this.clampDimension(parsed.completeness as number ?? 5),
+      actionability: this.clampDimension(parsed.actionability as number ?? 5),
+      reasoning: parsed.reasoning as string ?? 'No reasoning provided',
+      evaluationFeedback,
     };
   }
 

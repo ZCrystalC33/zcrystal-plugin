@@ -43,10 +43,15 @@ export interface LLMEvaluationResult {
     completeness: number;
     actionability: number;
     reasoning: string;
+    evaluationFeedback?: {
+        whyScore: string;
+        howToImprove: string;
+    };
 }
 export declare class SelfEvolutionEngine {
     private skillManager;
     private honcho?;
+    private feedbackStore?;
     private traces;
     private dataDir;
     private evolutionHistory;
