@@ -226,10 +226,11 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
 
   // Self-Doubt Recall - Agent self-triggered memory recovery
   // Use when Agent suspects memory gaps: "我不記得", "不確定", "需要確認"
+  // Also checks for pending recall from auto-detection (before_prompt_build hook)
   api.registerTool({
     name: 'zcrystal_recall',
     label: 'ZCrystal Recall',
-    description: 'Recall relevant context from conversation history. Use when you suspect memory gaps or need to verify previous context. Call this BEFORE saying "I don\'t remember".',
+    description: 'Recall relevant context from conversation history. Use when you suspect memory gaps or need to verify previous context. Call this BEFORE saying "I don\'t remember". If uncertainty was auto-detected, results may be waiting in state.',
     parameters: Type.Object({
       query: Type.String(),
       limit: Type.Optional(Type.Number()),
@@ -237,10 +238,34 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
     async execute(_id, params) {
       const limit = params.limit || 5;
       try {
-        const { quickRecall } = await import('../memory/recall.js');
-        const results = await quickRecall(params.query, limit);
+        // First check if there's pending recall from auto-detection
+        let recallSource = 'manual';
+        let results = '';
+        
+        if (state) {
+          const pendingRecall = await state.router.memoryLoad('L1', '_pending_recall');
+          if (pendingRecall.success && pendingRecall.data) {
+            try {
+              const parsed = JSON.parse(pendingRecall.data as string);
+              if (Date.now() - parsed.timestamp < 60_000) {
+                results = parsed.results as string;
+                recallSource = 'auto-detected';
+                console.log(`[ZCrystal:recall] Using auto-detected recall (${parsed.marker})`);
+              }
+            } catch {
+              // Fall through to manual search
+            }
+          }
+        }
+        
+        // If no pending recall, do manual search
+        if (!results) {
+          const { quickRecall } = await import('../memory/recall.js');
+          results = await quickRecall(params.query, limit);
+        }
+        
         if (results) {
-          return okResult(`[Recall] Found relevant context:\n${results}\n\n💡 If this helps, incorporate into your response.`, { query: params.query });
+          return okResult(`[Recall (${recallSource})] Found relevant context:\n${results}\n\n💡 If this helps, incorporate into your response.`, { query: params.query, source: recallSource });
         }
         return okResult('[Recall] No relevant context found. You may proceed with your best knowledge.', { query: params.query });
       } catch (err) {

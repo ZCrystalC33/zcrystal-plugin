@@ -14,6 +14,31 @@ import { join } from 'node:path';
 import { stripPrivateTags } from './utils/privacy-filter.js';
 import { UNCERTAINTY_MARKERS } from './memory/recall.js';
 const FTS5_REALTIME_INDEXER = join(config.paths.home, '.openclaw', 'skills', 'fts5', 'realtime_index.py');
+let pendingRecallContext = null;
+const RECALL_CONTEXT_TTL_MS = 30_000; // 30 second window
+function setRecallContext(ctx) {
+    pendingRecallContext = ctx;
+    // Auto-clear after TTL
+    setTimeout(() => {
+        if (pendingRecallContext === ctx) {
+            pendingRecallContext = null;
+        }
+    }, RECALL_CONTEXT_TTL_MS);
+}
+function getRecallContext() {
+    if (!pendingRecallContext)
+        return null;
+    // Check if expired
+    if (Date.now() - pendingRecallContext.timestamp > RECALL_CONTEXT_TTL_MS) {
+        pendingRecallContext = null;
+        return null;
+    }
+    return pendingRecallContext;
+}
+// Clear recall context (called after successful injection)
+function clearRecallContext() {
+    pendingRecallContext = null;
+}
 import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, EvolutionCoordinator, EvolutionScheduler, ReviewEngine, ToolHub, SkillGenerator, SkillVersioning, SkillIndexer, SkillValidator, SkillMerger, CircuitBreaker, RateLimiter, StructuredLogger, Metrics, WorkflowEngine, OpenClawSkillAdapter, SkillSyncManager, ReplayRunner, HookRegistry, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
 import { registerCoreTools, registerTaskTools, registerSkillTools, registerWorkflowTools, registerSystemTools, registerProactiveTools, } from './tools/index.js';
 import { registerSignalTools } from './routes/signals.js';
@@ -592,11 +617,10 @@ export default definePluginEntry({
                 }
             }, { name: 'zcrystal:msg_sent' });
             // =====================================================================
-            // Self-Doubt Recall - llm_output hook for automatic memory recovery
+            // Self-Doubt Recall - Part 1: llm_output hook captures uncertainty
             // =====================================================================
-            // When Agent outputs uncertainty markers, auto-search FTS5
-            // This implements "方案 C: 混合模式" - system prompt + post-response hook
-            api.registerHook('llm_output', async (event) => {
+            // When Agent outputs uncertainty markers, store context for later injection
+            api.on('llm_output', async (event, ctx) => {
                 if (!state)
                     return;
                 const llmEvent = event;
@@ -617,31 +641,66 @@ export default definePluginEntry({
                     // Extract search terms
                     const words = context.split(/[\s,，。!?]+/).filter(w => w.length > 2);
                     const searchTerms = words.slice(-6).join(' ') || marker;
-                    // Fire-and-forget: log for now (injection would need before_prompt_build to return)
-                    const { spawn } = await import('node:child_process');
-                    const searchScript = `
+                    // Store context for before_prompt_build to inject
+                    setRecallContext({
+                        marker,
+                        searchTerms,
+                        timestamp: Date.now(),
+                        responsePreview: text.slice(0, 100),
+                    });
+                    console.log(`[ZCrystal:self-doubt] Detected "${marker}". Context stored for injection.`);
+                    break; // Only process first uncertainty marker
+                }
+            });
+            // =====================================================================
+            // Self-Doubt Recall - Part 2: before_prompt_build hook injects recall
+            // =====================================================================
+            // Reads pending recall context and stores recall results in state for tool access
+            api.on('before_prompt_build', async (event, ctx) => {
+                if (!state)
+                    return;
+                // Check for pending recall context
+                const recallCtx = getRecallContext();
+                if (!recallCtx)
+                    return; // No uncertainty to recall
+                // Perform FTS5 search with the stored terms
+                const { execSync } = await import('node:child_process');
+                const searchScript = `
 import sys
 sys.path.insert(0, '/home/snow/.openclaw')
 from skills.fts5 import search
-results = search(${JSON.stringify(searchTerms)}, limit=3)
+results = search(${JSON.stringify(recallCtx.searchTerms)}, limit=5)
 if results:
-    print('MEMORY RECALL:', end='')
-    for r in results[:3]:
-        print(f"[{r['sender'][:8]}] {r['content'][:80]}...", end=' | ')
-    print()
+    lines = []
+    for r in results:
+        ts = r.get('timestamp', '')[:16]
+        sender = r.get('sender', 'unknown')[:12]
+        content = r.get('content', '')[:150].replace('\\n', ' ')
+        lines.append(f\"[{ts}] {sender}: {content}\")
+    print('\\n'.join(lines))
 else:
-    print('MEMORY RECALL: No results found')
+    print('')
 `;
-                    try {
-                        spawn('python3', ['-c', searchScript], { detached: true, stdio: 'ignore' });
-                        console.log(`[ZCrystal:self-doubt] Detected "${marker}" at position ${markerIdx}. Auto-search triggered.`);
+                try {
+                    const searchResults = execSync(`python3 -c "${searchScript}"`, {
+                        timeout: 5000,
+                        encoding: 'utf-8',
+                    }).trim();
+                    if (searchResults) {
+                        // Store in state so zcrystal_recall tool can access it
+                        await state.router.memoryStoreData('L1', '_pending_recall', JSON.stringify({
+                            marker: recallCtx.marker,
+                            results: searchResults,
+                            timestamp: Date.now(),
+                        }));
+                        clearRecallContext();
+                        console.log(`[ZCrystal:self-doubt] Stored recall results in state for tool access.`);
                     }
-                    catch (err) {
-                        // Best-effort: don't fail the output
-                    }
-                    break; // Only process first uncertainty marker
                 }
-            }, { name: 'zcrystal:self_doubt_recall' });
+                catch (err) {
+                    console.warn('[ZCrystal:self-doubt] Search failed:', err);
+                }
+            });
             console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 95');
         }
         catch (err) {
