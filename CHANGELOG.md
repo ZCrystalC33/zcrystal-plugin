@@ -257,3 +257,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 - `npm run build && npm test` → **117/117 tests passed** ✅
 
+
+## [v1.0.6] - 2026-04-25
+
+> **Self-Doubt Recall System 完成 - 方案 C 混合模式**
+
+### ✨ Features（新功能）
+
+| Commit | 功能 | 說明 |
+|--------|------|------|
+| `7bb60fc` | llm_output hook | 監控 Agent 回應中的 uncertainty markers |
+| `7bb60fc` | Auto-search FTS5 | 偵測「我不記得」時自動觸發搜尋 |
+| `7bb60fc` | 3-layer solution | 手動 zcrystal_recall + self-doubt hook + proactive search |
+
+### 🧪 Test Results
+
+- `npm run build && npm test` → **117/117 tests passed** ✅
+
