@@ -274,3 +274,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 - `npm run build && npm test` → **117/117 tests passed** ✅
 
+
+## [v1.0.7] - 2026-04-25
+
+> **Context Injection + Cross-Hook State Sharing**
+
+### ✨ Features（新功能）
+
+| Commit | 功能 | 說明 |
+|--------|------|------|
+| `5bbefc7` | Self-Doubt Recall Flow | llm_output → before_prompt_build → state → tool |
+| `5bbefc7` | PendingRecallContext Store | Module-level store for cross-hook communication |
+| `5bbefc7` | Enhanced zcrystal_recall | 先檢查 auto-detected recall，再 manual search |
+| `5bbefc7` | `api.on()` hook registration | 修正 before_prompt_build 回傳問題 |
+
+### 🔧 Optimizations（優化）
+
+| 項目 | 說明 | 狀態 |
+|------|------|------|
+| Context Injection | 讓 recall 結果能注入 Agent | ✅ 已完成 |
+| Evolution Learning Persistence | 進化結果累積到 memory | ⏳ 待實作 |
+| FTS5 Batch Write | 減少多餘 process | ⏳ 待實作 |
+
+### 🧪 Test Results
+
+- `npm run build && npm test` → **117/117 tests passed** ✅
+
