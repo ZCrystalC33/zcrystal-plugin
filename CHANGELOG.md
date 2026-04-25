@@ -4,6 +4,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/)
 
 ---
 
+# 2026-04-25 (下午 v2)
+
+## [v1.0.4] - 2026-04-25
+
+> **移除無用的 Auto-Context Recall Hook + 性能優化**
+
+### 🔧 Bug Fixes（錯誤修復）
+
+| Commit | 修復內容 |
+|--------|----------|
+| `ba005f2` | 移除 `before_prompt_build` 無用 Python spawn（結果被丟棄，純浪費）|
+| `ba005f2` | Performance Review 完成（10 個瓶頸，移除 B4 無用 hook）|
+
+### 🧪 Test Results
+
+- `npm run build && npm test` → **117/117 tests passed** ✅
+
+---
+
 # 2026-04-25 (下午)
 
 ## [v1.0.3] - 2026-04-25
