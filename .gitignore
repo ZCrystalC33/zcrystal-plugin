@@ -1,1 +1,16 @@
 node_modules/
+
+# OpenClaw local data
+.claw/
+.sandbox-tmp/
+*.sandbox
+
+# Temp files
+*.tmp
+*.temp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
