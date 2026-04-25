@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { stripPrivateTags } from './utils/privacy-filter.js';
 import { UNCERTAINTY_MARKERS } from './memory/recall.js';
+import { getFTS5BatchIndexer } from './memory/fts5-batch.js';
 
 const FTS5_REALTIME_INDEXER = join(config.paths.home, '.openclaw', 'skills', 'fts5', 'realtime_index.py');
 
