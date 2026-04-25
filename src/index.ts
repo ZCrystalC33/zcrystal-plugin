@@ -14,6 +14,7 @@ import { config } from './config.js';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { stripPrivateTags } from './utils/privacy-filter.js';
+import { UNCERTAINTY_MARKERS } from './memory/recall.js';
 
 const FTS5_REALTIME_INDEXER = join(config.paths.home, '.openclaw', 'skills', 'fts5', 'realtime_index.py');
 
@@ -689,6 +690,59 @@ export default definePluginEntry({
         }
       }
     }, { name: 'zcrystal:msg_sent' });
+
+    // =====================================================================
+    // Self-Doubt Recall - llm_output hook for automatic memory recovery
+    // =====================================================================
+    // When Agent outputs uncertainty markers, auto-search FTS5
+    // This implements "方案 C: 混合模式" - system prompt + post-response hook
+
+    api.registerHook('llm_output', async (event: unknown) => {
+      if (!state) return;
+      const llmEvent = event as { assistantTexts?: string[] };
+      const texts = llmEvent.assistantTexts || [];
+      if (texts.length === 0) return;
+
+      // Check each assistant text for uncertainty markers
+      for (const text of texts) {
+        const hasUncertainty = UNCERTAINTY_MARKERS.some(m => text.includes(m));
+        if (!hasUncertainty) continue;
+
+        // Extract context around marker
+        const marker = UNCERTAINTY_MARKERS.find(m => text.includes(m))!;
+        const markerIdx = text.indexOf(marker);
+        const start = Math.max(0, markerIdx - 100);
+        const end = Math.min(text.length, markerIdx + marker.length + 100);
+        const context = text.slice(start, end);
+
+        // Extract search terms
+        const words = context.split(/[\s,，。!?]+/).filter(w => w.length > 2);
+        const searchTerms = words.slice(-6).join(' ') || marker;
+
+        // Fire-and-forget: log for now (injection would need before_prompt_build to return)
+        const { spawn } = await import('node:child_process');
+        const searchScript = `
+import sys
+sys.path.insert(0, '/home/snow/.openclaw')
+from skills.fts5 import search
+results = search(${JSON.stringify(searchTerms)}, limit=3)
+if results:
+    print('MEMORY RECALL:', end='')
+    for r in results[:3]:
+        print(f"[{r['sender'][:8]}] {r['content'][:80]}...", end=' | ')
+    print()
+else:
+    print('MEMORY RECALL: No results found')
+`;
+        try {
+          spawn('python3', ['-c', searchScript], { detached: true, stdio: 'ignore' });
+          console.log(`[ZCrystal:self-doubt] Detected "${marker}" at position ${markerIdx}. Auto-search triggered.`);
+        } catch (err) {
+          // Best-effort: don't fail the output
+        }
+        break; // Only process first uncertainty marker
+      }
+    }, { name: 'zcrystal:self_doubt_recall' });
 
     console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 95');
   } catch (err) {
