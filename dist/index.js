@@ -9,6 +9,9 @@
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { Type } from '@sinclair/typebox';
 import { config } from './config.js';
+import { spawn } from 'node:child_process';
+import { join } from 'node:path';
+const FTS5_REALTIME_INDEXER = join(config.paths.home, '.openclaw', 'skills', 'fts5', 'realtime_index.py');
 import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, EvolutionCoordinator, EvolutionScheduler, ReviewEngine, ToolHub, SkillGenerator, SkillVersioning, SkillIndexer, SkillValidator, SkillMerger, CircuitBreaker, RateLimiter, StructuredLogger, Metrics, WorkflowEngine, OpenClawSkillAdapter, SkillSyncManager, ReplayRunner, HookRegistry, DiskStore, EvolutionStore, TraceStore, } from '@zcrystal/evo';
 import { registerCoreTools, registerTaskTools, registerSkillTools, registerWorkflowTools, registerSystemTools, registerProactiveTools, } from './tools/index.js';
 import { registerSignalTools } from './routes/signals.js';
@@ -505,6 +508,24 @@ export default definePluginEntry({
                     || '';
                 if (msg) {
                     await state.router.memoryStoreData('L3', 'last_message', msg);
+                    // Real-time FTS5 indexing
+                    const rawEvent = event;
+                    try {
+                        const msgData = JSON.stringify({
+                            sender: 'user',
+                            sender_label: rawEvent.sender_label || 'user',
+                            content: msg,
+                            channel: rawEvent.channel || 'telegram',
+                            session_key: rawEvent.session_key || '',
+                            message_id: rawEvent.message_id || '',
+                            timestamp: rawEvent.timestamp || new Date().toISOString(),
+                        });
+                        // Fire-and-forget: don't block on FTS5 indexing
+                        spawn('python3', [FTS5_REALTIME_INDEXER, msgData], { detached: true, stdio: 'ignore' });
+                    }
+                    catch (err) {
+                        console.warn('[ZCrystal] FTS5 realtime index failed:', err);
+                    }
                 }
             }, { name: 'zcrystal:msg_received' });
             api.registerHook('message:sent', async (event) => {
@@ -514,8 +535,28 @@ export default definePluginEntry({
                 const content = event?.context?.content
                     || event?.content
                     || '';
-                if (content)
+                if (content) {
                     await state.router.memoryStoreData('L2', 'last_ai_response', content);
+                    // Real-time FTS5 indexing
+                    const rawEvent = event;
+                    try {
+                        const msgData = JSON.stringify({
+                            sender: 'assistant',
+                            sender_label: rawEvent.sender_label || 'assistant',
+                            content,
+                            channel: rawEvent.channel || 'telegram',
+                            session_key: rawEvent.session_key || '',
+                            message_id: rawEvent.message_id || '',
+                            timestamp: rawEvent.timestamp || new Date().toISOString(),
+                        });
+                        // Fire-and-forget: don't block on FTS5 indexing
+                        spawn('python3', [FTS5_REALTIME_INDEXER, msgData], { detached: true, stdio: 'ignore' });
+                    }
+                    catch (err) {
+                        // Best-effort: don't fail the hook if FTS5 indexing fails
+                        console.warn('[ZCrystal] FTS5 realtime index failed:', err);
+                    }
+                }
             }, { name: 'zcrystal:msg_sent' });
             console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 95');
         }

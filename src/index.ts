@@ -11,6 +11,10 @@ import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 import { Type } from '@sinclair/typebox';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { config } from './config.js';
+import { spawn } from 'node:child_process';
+import { join } from 'node:path';
+
+const FTS5_REALTIME_INDEXER = join(config.paths.home, '.openclaw', 'skills', 'fts5', 'realtime_index.py');
 
 import {
   UnifiedApiRouter,
@@ -608,6 +612,23 @@ export default definePluginEntry({
         || '';
       if (msg) {
         await state.router.memoryStoreData('L3', 'last_message', msg);
+        // Real-time FTS5 indexing
+        const rawEvent = event as { sender?: string; sender_label?: string; channel?: string; session_key?: string; message_id?: string; timestamp?: string };
+        try {
+          const msgData = JSON.stringify({
+            sender: 'user',
+            sender_label: rawEvent.sender_label || 'user',
+            content: msg,
+            channel: rawEvent.channel || 'telegram',
+            session_key: rawEvent.session_key || '',
+            message_id: rawEvent.message_id || '',
+            timestamp: rawEvent.timestamp || new Date().toISOString(),
+          });
+          // Fire-and-forget: don't block on FTS5 indexing
+          spawn('python3', [FTS5_REALTIME_INDEXER, msgData], { detached: true, stdio: 'ignore' });
+        } catch (err) {
+          console.warn('[ZCrystal] FTS5 realtime index failed:', err);
+        }
       }
     }, { name: 'zcrystal:msg_received' });
 
@@ -617,7 +638,27 @@ export default definePluginEntry({
       const content = (event as { context?: { content?: string }; content?: string })?.context?.content
         || (event as { content?: string })?.content
         || '';
-      if (content) await state.router.memoryStoreData('L2', 'last_ai_response', content);
+      if (content) {
+        await state.router.memoryStoreData('L2', 'last_ai_response', content);
+        // Real-time FTS5 indexing
+        const rawEvent = event as { sender?: string; sender_label?: string; channel?: string; session_key?: string; message_id?: string; timestamp?: string };
+        try {
+          const msgData = JSON.stringify({
+            sender: 'assistant',
+            sender_label: rawEvent.sender_label || 'assistant',
+            content,
+            channel: rawEvent.channel || 'telegram',
+            session_key: rawEvent.session_key || '',
+            message_id: rawEvent.message_id || '',
+            timestamp: rawEvent.timestamp || new Date().toISOString(),
+          });
+          // Fire-and-forget: don't block on FTS5 indexing
+          spawn('python3', [FTS5_REALTIME_INDEXER, msgData], { detached: true, stdio: 'ignore' });
+        } catch (err) {
+          // Best-effort: don't fail the hook if FTS5 indexing fails
+          console.warn('[ZCrystal] FTS5 realtime index failed:', err);
+        }
+      }
     }, { name: 'zcrystal:msg_sent' });
 
     console.log('[ZCrystal] ZCrystal_evo integration complete. Tools registered: 95');
