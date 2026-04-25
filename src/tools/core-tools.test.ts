@@ -122,7 +122,7 @@ describe('Core Tools', () => {
     expect(result.content[0].text).toContain('No skills');
   });
 
-  it('should count 10 core tools (including progressive disclosure)', async () => {
+  it('should count 11 core tools (zcrystal_recall) (including progressive disclosure)', async () => {
     const { registerCoreTools } = await import('./core-tools.js');
     registerCoreTools(mockApi, mockState);
     
