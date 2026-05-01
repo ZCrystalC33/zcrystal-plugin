@@ -130,6 +130,7 @@ export interface PluginState {
   skillSyncManager: SkillSyncManager;
   replayRunner: ReplayRunner;
   hookRegistry: HookRegistry;
+  traceStore: TraceStore;
 }
 
 let state: PluginState | null = null;
@@ -277,7 +278,8 @@ export default definePluginEntry({
       router, honcho, skillManager, selfEvolution, evolutionCoordinator, evolutionScheduler, reviewEngine,
       toolHub, skillGenerator, skillVersioning, skillIndexer, skillValidator, skillMerger,
       circuitBreaker, rateLimiter, logger, metrics, workflowEngine,
-      skillAdapter, skillSyncManager, replayRunner, hookRegistry
+      skillAdapter, skillSyncManager, replayRunner, hookRegistry,
+      traceStore
     };
 
     // FIX: Auto-start evolution scheduler (every 1 hour by default)
@@ -787,29 +789,27 @@ export default definePluginEntry({
       if (!recallCtx) return; // No uncertainty to recall
 
       // Perform FTS5 search with the stored terms
-      const { execSync } = await import('node:child_process');
-      const searchScript = `
-import sys
-sys.path.insert(0, '/home/snow/.openclaw')
-from skills.fts5 import search
-results = search(${JSON.stringify(recallCtx.searchTerms)}, limit=5)
-if results:
-    lines = []
-    for r in results:
-        ts = r.get('timestamp', '')[:16]
-        sender = r.get('sender', 'unknown')[:12]
-        content = r.get('content', '')[:150].replace('\\n', ' ')
-        lines.append(f\"[{ts}] {sender}: {content}\")
-    print('\\n'.join(lines))
-else:
-    print('')
-`;
+      const { spawn } = await import('node:child_process');
+      const termsArg = JSON.stringify(recallCtx.searchTerms);
+      const pyScript = (
+        'import sys; ' +
+        'sys.path.insert(0, "/home/snow/.openclaw"); ' +
+        'from skills.fts5 import search; ' +
+        'results = search(' + termsArg + ', limit=5); ' +
+        'if results: print("\\n".join([f\"[{r.get("timestamp","")[:16]}] {r.get("sender","unknown")[:12]}: {r.get("content","")[:150].replace(chr(10), " ")}\" for r in results])); ' +
+        'else: print("")'
+      );
 
       try {
-        const searchResults = execSync(`python3 -c "${searchScript}"`, {
-          timeout: 5000,
-          encoding: 'utf-8',
-        }).trim();
+        const py = spawn('python3', ['-c', pyScript]);
+        let searchResults = '';
+        py.stdout.on('data', (d: Buffer) => searchResults += d.toString());
+        py.stderr.on('data', (d: Buffer) => console.warn('[ZCrystal:self-doubt]', d.toString()));
+        await new Promise<void>((resolve, reject) => {
+          py.on('close', (code: number | null) => { if (code === 0) resolve(); else reject(new Error('exit ' + code)); });
+          py.on('error', reject);
+        });
+        searchResults = searchResults.trim();
 
         if (searchResults) {
           // Store in state so zcrystal_recall tool can access it

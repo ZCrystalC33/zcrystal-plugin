@@ -9,6 +9,19 @@ import { okResult, errResult } from '../index.js';
 import type { Skill } from '@zcrystal/evo';
 import type { SearchResult } from '../types.js';
 
+// Local type definition for ExecutionTrace
+// Note: TraceStore.saveTrace() expects string id (not TypedId object)
+interface ExecutionTrace {
+  id: string;  // Format: "skillSlug:trace:timestamp" (store key)
+  skillSlug: string;
+  timestamp: number;
+  success: boolean;
+  durationMs: number;
+  details?: string;
+  input?: string;
+  output?: string;
+}
+
 // ============================================================
 // Type Helpers (FIX: Replace messy inline casting with helpers)
 // ============================================================
@@ -167,14 +180,37 @@ export function registerCoreTools(api: OpenClawPluginApi, state: PluginState) {
   api.registerTool({
     name: 'zcrystal_record_trace',
     label: 'ZCrystal Record Trace',
-    description: 'Record execution trace (Agent-internal)',
+    description: 'Record execution trace for self-evolution',
     parameters: Type.Object({
       skillSlug: Type.String(), input: Type.String(), output: Type.String(),
       success: Type.Boolean(), duration: Type.Number(),
     }),
     async execute(_id, params) {
-      state.logger.info('[ZCrystal] Trace recorded', { skillSlug: params.skillSlug, success: params.success });
-      return okResult('Trace recorded', { skillSlug: params.skillSlug });
+      try {
+        if (!state?.traceStore) {
+          state?.logger?.warning('[ZCrystal] traceStore not available');
+          return errResult('Plugin not initialized');
+        }
+
+        const trace = {
+          id: `${params.skillSlug}:trace:${Date.now()}`,
+          skillSlug: params.skillSlug,
+          input: params.input,
+          output: params.output,
+          success: params.success,
+          timestamp: Date.now(),
+          durationMs: params.duration || 0,
+        };
+
+
+        // Cast to any to bypass strict typing mismatch (store expects TypedId, we pass string id)
+        await (state.traceStore as any).saveTrace(trace);
+        state.logger?.info('[ZCrystal] Trace saved', { skillSlug: params.skillSlug, success: params.success });
+        return okResult('Trace recorded', { skillSlug: params.skillSlug, traceId: trace.id });
+      } catch (err) {
+        state.logger?.error('[ZCrystal] Failed to save trace:', { error: String(err) });
+        return errResult('Failed to save trace: ' + String(err));
+      }
     },
   }, { optional: true });
 

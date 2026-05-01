@@ -6,7 +6,7 @@
  * - ZCrystal_evo advanced features (TaskLifecycle, MemoryLayers, ModelRouter)
  * - FTS5 search integration
  */
-import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, EvolutionCoordinator, EvolutionScheduler, ReviewEngine, ToolHub, SkillGenerator, SkillVersioning, SkillIndexer, SkillValidator, SkillMerger, CircuitBreaker, RateLimiter, StructuredLogger, Metrics, WorkflowEngine, OpenClawSkillAdapter, SkillSyncManager, ReplayRunner, HookRegistry } from '@zcrystal/evo';
+import { UnifiedApiRouter, createHonchoClient, createSkillManager, SelfEvolutionEngine, EvolutionCoordinator, EvolutionScheduler, ReviewEngine, ToolHub, SkillGenerator, SkillVersioning, SkillIndexer, SkillValidator, SkillMerger, CircuitBreaker, RateLimiter, StructuredLogger, Metrics, WorkflowEngine, OpenClawSkillAdapter, SkillSyncManager, ReplayRunner, HookRegistry, TraceStore } from '@zcrystal/evo';
 export interface PluginState {
     router: UnifiedApiRouter;
     honcho: ReturnType<typeof createHonchoClient>;
@@ -30,6 +30,7 @@ export interface PluginState {
     skillSyncManager: SkillSyncManager;
     replayRunner: ReplayRunner;
     hookRegistry: HookRegistry;
+    traceStore: TraceStore;
 }
 declare function okResult(text: string, details?: unknown): {
     content: {

@@ -9,7 +9,9 @@ export declare class FeedbackStore {
     private readonly MAX_ENTRIES;
     private readonly DATA_FILE;
     private dataDir;
+    private loadPromise;
     constructor(dataDir: string);
+    private ensureLoaded;
     add(entry: Omit<FeedbackEntry, 'timestamp'>): FeedbackEntry;
     search(trigger: string): FeedbackEntry[];
     getRelevantForSkill(skillSlug: string, limit?: number): FeedbackEntry[];

@@ -181,6 +181,30 @@ export class SignalStore {
   }
 
   // --------------------------------------------------------------------------
+  // Graceful Shutdown
+  // --------------------------------------------------------------------------
+
+  /**
+   * Flush pending writes to disk. Call on shutdown.
+   */
+  async flush(): Promise<void> {
+    if (this.writeTimer !== null) {
+      clearTimeout(this.writeTimer);
+      this.writeTimer = null;
+    }
+    // Synchronous write bypasses debounce
+    try {
+      const data: SignalStoreData = {
+        signals: Object.fromEntries(this.signals),
+        updatedAt: Date.now(),
+      };
+      await writeFile(this.diskPath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('[SignalStore] Flush failed:', err);
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // Helpers
   // --------------------------------------------------------------------------
 

@@ -56,6 +56,10 @@ export declare class SignalStore {
      * Get count of active signals.
      */
     size(): number;
+    /**
+     * Flush pending writes to disk. Call on shutdown.
+     */
+    flush(): Promise<void>;
     private generateId;
 }
 export {};

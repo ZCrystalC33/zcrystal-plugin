@@ -14,13 +14,27 @@ export class FeedbackStore {
   private readonly MAX_ENTRIES = 200;
   private readonly DATA_FILE = 'feedback-store.json';
   private dataDir: string;
+  private loadPromise: Promise<void> | null = null;
 
   constructor(dataDir: string) {
     this.dataDir = dataDir;
-    this.load();
+    // Fire-and-forget async load - errors caught silently
+    this.loadPromise = this.load().catch(err => {
+      console.error('[FeedbackStore] Load failed:', err);
+    });
+  }
+
+  // Ensure load completes before any operation
+  private async ensureLoaded(): Promise<void> {
+    if (this.loadPromise) {
+      await this.loadPromise;
+      this.loadPromise = null;
+    }
   }
 
   add(entry: Omit<FeedbackEntry, 'timestamp'>): FeedbackEntry {
+    // Fire-and-forget: don't await ensureLoaded (performance)
+    this.ensureLoaded().catch(() => {});
     const full: FeedbackEntry = { ...entry, timestamp: Date.now() };
     this.entries.push(full);
     if (this.entries.length > this.MAX_ENTRIES) {

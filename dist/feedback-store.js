@@ -11,11 +11,24 @@ export class FeedbackStore {
     MAX_ENTRIES = 200;
     DATA_FILE = 'feedback-store.json';
     dataDir;
+    loadPromise = null;
     constructor(dataDir) {
         this.dataDir = dataDir;
-        this.load();
+        // Fire-and-forget async load - errors caught silently
+        this.loadPromise = this.load().catch(err => {
+            console.error('[FeedbackStore] Load failed:', err);
+        });
+    }
+    // Ensure load completes before any operation
+    async ensureLoaded() {
+        if (this.loadPromise) {
+            await this.loadPromise;
+            this.loadPromise = null;
+        }
     }
     add(entry) {
+        // Fire-and-forget: don't await ensureLoaded (performance)
+        this.ensureLoaded().catch(() => { });
         const full = { ...entry, timestamp: Date.now() };
         this.entries.push(full);
         if (this.entries.length > this.MAX_ENTRIES) {
